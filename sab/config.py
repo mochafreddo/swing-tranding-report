@@ -54,6 +54,15 @@ class Config:
     rs_benchmark_return: float = 0.0
     holdings_path: Optional[str] = None
     holdings: HoldingsData = field(default_factory=lambda: load_holdings(None))
+    sell_atr_multiplier: float = 1.0
+    sell_time_stop_days: int = 10
+    sell_require_sma200: bool = True
+    sell_ema_short: int = 20
+    sell_ema_long: int = 50
+    sell_rsi_period: int = 14
+    sell_rsi_floor: float = 50.0
+    sell_rsi_floor_alt: float = 30.0
+    sell_min_bars: int = 20
 
 
 def _normalize_kis_base(url: Optional[str]) -> Optional[str]:
@@ -179,6 +188,16 @@ def load_config(
     holdings_path = env_str("HOLDINGS_FILE", "files.holdings", None)
     holdings_data = load_holdings(holdings_path)
 
+    sell_atr_multiplier = env_float("SELL_ATR_MULTIPLIER", "sell.atr_trail_multiplier", 1.0)
+    sell_time_stop_days = env_int("SELL_TIME_STOP_DAYS", "sell.time_stop_days", 10)
+    sell_require_sma200 = env_bool("SELL_REQUIRE_SMA200", "sell.require_sma200", True)
+    sell_ema_short = env_int("SELL_EMA_SHORT", "sell.ema_short", 20)
+    sell_ema_long = env_int("SELL_EMA_LONG", "sell.ema_long", 50)
+    sell_rsi_period = env_int("SELL_RSI_PERIOD", "sell.rsi_period", 14)
+    sell_rsi_floor = env_float("SELL_RSI_FLOOR", "sell.rsi_floor", 50.0)
+    sell_rsi_floor_alt = env_float("SELL_RSI_FLOOR_ALT", "sell.rsi_floor_alt", 30.0)
+    sell_min_bars = env_int("SELL_MIN_BARS", "sell.min_bars", 20)
+
     return Config(
         data_provider=provider,
         kis_app_key=os.getenv("KIS_APP_KEY") or from_yaml("kis.app_key"),
@@ -203,6 +222,15 @@ def load_config(
         rs_benchmark_return=rs_benchmark_return,
         holdings_path=holdings_path,
         holdings=holdings_data,
+        sell_atr_multiplier=sell_atr_multiplier,
+        sell_time_stop_days=sell_time_stop_days,
+        sell_require_sma200=sell_require_sma200,
+        sell_ema_short=sell_ema_short,
+        sell_ema_long=sell_ema_long,
+        sell_rsi_period=sell_rsi_period,
+        sell_rsi_floor=sell_rsi_floor,
+        sell_rsi_floor_alt=sell_rsi_floor_alt,
+        sell_min_bars=sell_min_bars,
     )
 
 

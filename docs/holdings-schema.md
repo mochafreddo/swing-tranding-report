@@ -50,14 +50,11 @@ settings:
 - 리포지토리 루트에 있는 `holdings.example.yaml` 참조
 - 기본 경로는 `config.yaml`의 `files.holdings` 또는 `.env`의 `HOLDINGS_FILE`로 설정할 수 있습니다.
 
-## 차후 사용 계획
+## 활용
 
-- `sab config` 또는 `sab scan`이 실행될 때 `holdings.yaml`을 읽어 보유 종목의 Sell/Review 섹션을 생성합니다.
-- 구조가 확정되면 `sab/config.py` 혹은 별도 모듈에서 로더를 구현하고, 리포트 생성 시 활용합니다.
+- `sab sell` 서브커맨드는 `holdings.yaml`을 로드하여 보유 종목의 Sell/Review 리포트를 생성합니다.
+- `holdings.example.yaml`을 복사해 개인 보유 목록을 작성한 뒤, `HOLDINGS_FILE` 또는 `config.yaml`의 `files.holdings` 경로를 지정하세요.
 
--
+## 향후 확장 아이디어
 
-+### defaults 블록 (v1.1 계획)
-+
-+향후 보유 종목 평가 시 전략 임계치를 holdings에 반영하기 위해, `settings.defaults.strategy` 등 추가 필드를 사용할 수 있도록 확장 예정입니다.
-+EOF
+- `settings` 블록에 전략별 기본 임계치(`defaults.strategy` 등)를 추가해 자동 평가 가중치를 조절할 수 있도록 확장 가능.

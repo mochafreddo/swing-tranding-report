@@ -31,6 +31,17 @@ strategy:
   rs_lookback_days: 60
   rs_benchmark_return: 0.0
 
+sell:
+  atr_trail_multiplier: 1.0
+  time_stop_days: 10
+  require_sma200: true
+  ema_short: 20
+  ema_long: 50
+  rsi_period: 14
+  rsi_floor: 50
+  rsi_floor_alt: 30
+  min_bars: 20
+
 entry_check:
   enabled: false
 

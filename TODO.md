@@ -66,7 +66,7 @@
     - 무효화: EMA20/50 되크로스, 종가 EMA50/EMA20 하향 이탈, RSI50/30 재하락
     - 리스크: ATR 기반 트레일링 스탑(예: 1×ATR), 시간 스탑(N거래일 경과)
     - 예외: 갭다운 과도 시 방어 로직(부분청산/전량청산 기준)
-  - [ ] `sab sell` 서브커맨드 구현 → `reports/YYYY-MM-DD.sell.md`
+  - [x] `sab sell` 서브커맨드 구현 → `reports/YYYY-MM-DD.sell.md`
 
 ## v1.2 — 시각화/분석/품질 강화
 

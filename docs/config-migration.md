@@ -36,6 +36,15 @@
 | `RS_BENCHMARK_RETURN` | `strategy.rs_benchmark_return` |
 | `ENTRY_CHECK_ENABLED` | `entry_check.enabled` |
 | `UNIVERSE_MARKETS` | `universe.markets` (리스트) |
+| `SELL_ATR_MULTIPLIER` | `sell.atr_trail_multiplier` |
+| `SELL_TIME_STOP_DAYS` | `sell.time_stop_days` |
+| `SELL_REQUIRE_SMA200` | `sell.require_sma200` |
+| `SELL_EMA_SHORT` | `sell.ema_short` |
+| `SELL_EMA_LONG` | `sell.ema_long` |
+| `SELL_RSI_PERIOD` | `sell.rsi_period` |
+| `SELL_RSI_FLOOR` | `sell.rsi_floor` |
+| `SELL_RSI_FLOOR_ALT` | `sell.rsi_floor_alt` |
+| `SELL_MIN_BARS` | `sell.min_bars` |
 
 필요 시 해외 확장/추가 전략 항목은 동일한 방식으로 `config.yaml`에 정의합니다.
 

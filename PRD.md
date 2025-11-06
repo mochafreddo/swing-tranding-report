@@ -193,7 +193,7 @@
 - AC2: KIS로 워치리스트 종목의 일봉을 성공적으로 조회한다(모의/실전 중 택1 환경).
 - AC3: 기본 30개 이하 종목 평가를 2분 내 완료한다(캐시 활용 시).
 - AC4: Buy 리포트에 각 후보의 근거(EMA/RSI/ATR/갭) 요약이 포함된다.
-- (예정) AC5: `uv run -m sab sell` 실행 시 보유 평가 리포트(`YYYY-MM-DD.sell.md`)를 생성한다.
+- AC5: `uv run -m sab sell` 실행 시 보유 평가 리포트(`YYYY-MM-DD.sell.md`)를 생성한다.
 - (예정) AC6: `uv run -m sab entry` 실행 시 익일 시초 체크 리포트(`YYYY-MM-DD.entry.md`)를 생성한다.
 - AC5: 설정 파일만으로 대상 종목 수, 출력 경로, 데이터 제공자(kis/pykrx)를 변경할 수 있다.
 

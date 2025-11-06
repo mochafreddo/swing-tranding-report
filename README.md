@@ -36,6 +36,13 @@
   - `MIN_PRICE=1000` (스크리너 최소 가격 필터)
   - `RS_LOOKBACK_DAYS=60` (상대강도 계산 기간)
   - `RS_BENCHMARK_RETURN=0.0` (비교 기준 수익률, 소수로 입력 ex 0.05)
+  - (선택) Sell 규칙 커스터마이즈:
+    - `SELL_ATR_MULTIPLIER=1.0`
+    - `SELL_TIME_STOP_DAYS=10`
+    - `SELL_REQUIRE_SMA200=true`
+    - `SELL_EMA_SHORT=20`, `SELL_EMA_LONG=50`
+    - `SELL_RSI_PERIOD=14`, `SELL_RSI_FLOOR=50`, `SELL_RSI_FLOOR_ALT=30`
+    - `SELL_MIN_BARS=20`
 
 - 실행 예시
   - 기본 실행: `uv run -m sab scan`
@@ -44,12 +51,12 @@
   - 유니버스 선택: `uv run -m sab scan --universe watchlist` (옵션: `watchlist`, `screener`, `both`)
   - 워치리스트 지정: `uv run -m sab scan --watchlist watchlist.txt`
   - (선택) KIS 장애 시 PyKRX 폴백을 원하면 `pykrx` 패키지를 설치해 두세요 (`uv add pykrx`)
-  - (예정) 보유 평가: `uv run -m sab sell`
+  - 보유 평가: `uv run -m sab sell`
   - (예정) 익일 시초 체크: `uv run -m sab entry`
 
 - 결과(리포트 분리 설계)
   - Buy: `reports/YYYY-MM-DD.buy.md` (장 마감 후 후보·근거)
-  - Sell/Review: `reports/YYYY-MM-DD.sell.md` (보유 종목 평가) — 예정
+  - Sell/Review: `reports/YYYY-MM-DD.sell.md` (보유 종목 평가)
   - Entry: `reports/YYYY-MM-DD.entry.md` (익일 시초 체크) — 예정
   - 상세 포맷은 `docs/report-spec.md` 참고
 
@@ -80,7 +87,7 @@
 
 ## 상태
 
-- Buy 파이프라인(스캔→평가→리포트) 동작. Sell/Entry 서브커맨드는 순차 구현 예정.
+- Buy 파이프라인 및 Sell 서브커맨드 동작. Entry 서브커맨드는 순차 구현 예정.
 
 ## 라이선스
 

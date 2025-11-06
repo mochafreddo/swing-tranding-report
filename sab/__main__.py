@@ -6,6 +6,7 @@ import os
 import sys
 
 from .scan import run_scan
+from .sell import run_sell
 
 
 def _configure_logging() -> None:
@@ -30,6 +31,15 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["watchlist", "screener", "both"],
         help="Universe selection: watchlist only, screener only, or both",
     )
+
+    sell = sub.add_parser("sell", help="Evaluate holdings against sell/review rules")
+    sell.add_argument(
+        "--provider",
+        type=str,
+        default=None,
+        choices=["kis", "pykrx"],
+        help="Data provider override",
+    )
     return p
 
 
@@ -47,6 +57,9 @@ def main(argv: list[str] | None = None) -> int:
             screener_limit=ns.screener_limit,
             universe=ns.universe,
         )
+
+    if ns.cmd == "sell":
+        return run_sell(provider=ns.provider)
 
     parser.print_help()
     return 2
