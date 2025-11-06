@@ -19,17 +19,19 @@
   - [x] 일봉 조회(`/uapi/.../inquire-daily-itemchartprice`, TR_ID 설정)
   - [x] 캔들 캐시(`data/candles_<ticker>.json`) + 폴백 사용
   - [x] 레이트리밋/재시도(간단 backoff)
+  - [x] 히스토리 누적 수집: 날짜 창 이동으로 200+ 봉 확보(최소 `MIN_HISTORY_BARS` 충족), 증분 갱신, EGW00201 대비
 
 - 평가/리포트
   - [x] 지표 계산(EMA20/50, RSI14, ATR14, 갭)
   - [x] 후보 선별(골든크로스 + RSI 30 재돌파 + 갭 ±3%)
-  - [x] 리포트 생성(헤더/테이블/상세/Appendix, cache 상태 노출)
-  - [ ] 전략 개선 적용(문서 반영됨):
-    - [ ] SMA200 필터(옵션) + EMA 기울기 필터
-    - [ ] 갭 임계 ATR 기반 전환(GAP_ATR_MULTIPLIER)
-    - [ ] 유동성 필터(최근 20일 평균 거래대금 MIN_DOLLAR_VOLUME)
-    - [ ] ETF/ETN/레버리지/인버스 제외 옵션
-    - [ ] 점수화 및 정렬 개선(구성 요소별 점수 포함)
+  - [x] Buy 리포트 생성(헤더/테이블/상세/Appendix, cache 상태 노출)
+  - [x] Buy 리포트 파일명 `.buy.md` 적용(코드 반영)
+  - [x] 전략 개선 적용(문서 반영됨):
+    - [x] SMA200 필터(옵션) + EMA 기울기 필터
+    - [x] 갭 임계 ATR 기반 전환(GAP_ATR_MULTIPLIER)
+    - [x] 유동성 필터(최근 20일 평균 거래대금 MIN_DOLLAR_VOLUME)
+    - [x] ETF/ETN/레버리지/인버스 제외 옵션
+    - [x] 점수화 및 정렬 개선(구성 요소별 점수 포함)
 
 - CLI/UX 품질
   - [x] 옵션: `--limit`, `--watchlist`, `--provider`
@@ -39,20 +41,32 @@
 ## v1.1 — 스크리너/설정 고도화/폴백 정식화
 
 - 스크리너
-  - [ ] 지표/필터 결정: 최근 20일 평균 거래대금/거래량, 가격 하한 등
-  - [ ] KIS 순위/시세 API 검토 및 선택(MCP 활용)
+  - [x] 지표/필터 결정: 최근 20일 평균 거래대금/거래량, 가격 하한 등
+  - [x] KIS 순위/시세 API 검토 및 선택(MCP 활용)
     - 예: 국내주식 순위분석 카테고리(거래대금/거래량/등락률 상위)
   - [x] 구현: `sab/screener/kis_screener.py` (랭킹 조회 → 정규화 → 상위 N)
-  - [ ] 캐시/쿨다운(일중 과도 호출 방지)
-  - [ ] 워치리스트 병합 전략: 보유/워치 항상 포함 + 스크리너 상위 N
-  - [ ] CLI: `--screener N` 또는 `--universe screener|watchlist|both`
+  - [x] 캐시/쿨다운(일중 과도 호출 방지)
+    - [x] 일정 시간(예: 5분) 내 재실행 시 스크리너 결과 캐시 사용
+    - [x] 장중 재호출 시 최소 간격/쿨다운 로그 안내
+  - [x] 워치리스트 병합 전략: 보유/워치 항상 포함 + 스크리너 상위 N
+  - [x] CLI: `--screener-limit N`, `--universe watchlist|screener|both`
+  - [x] 리더 보완: RS(지수 대비) 점수 도입, MIN_PRICE(.env → 스크리너) 연동
 
 - 설정 고도화
-  - [ ] `config.yaml` 지원(.env 병행), 기본값/임계치 설정화
-  - [ ] 전략 임계치 전부 설정화(.env → config.yaml 마이그레이션 가이드)
+  - [x] `config.yaml` 지원(.env 병행), 기본값/임계치 설정화
+  - [x] 전략 임계치 전부 설정화(.env → config.yaml 마이그레이션 가이드)
 
 - 데이터 소스 폴백(선택)
-  - [ ] PyKRX 커넥터(`sab/data/pykrx_client.py`) 정식화 + 리포트 경고 표기
+  - [x] PyKRX 커넥터(`sab/data/pykrx_client.py`) 정식화 + 리포트 경고 표기
+
+- 보유/매도 평가(초안)
+  - [x] 보유 목록 스키마 설계(`holdings.yaml`): ticker, 수량, 진입가, 메모, 태그 등
+  - [x] 로더 구현(`sab/config.py` 또는 별도 모듈)
+  - [x] 매도/보류 규칙 정의 및 구현(`sab/signals/sell_rules.py`)
+    - 무효화: EMA20/50 되크로스, 종가 EMA50/EMA20 하향 이탈, RSI50/30 재하락
+    - 리스크: ATR 기반 트레일링 스탑(예: 1×ATR), 시간 스탑(N거래일 경과)
+    - 예외: 갭다운 과도 시 방어 로직(부분청산/전량청산 기준)
+  - [ ] `sab sell` 서브커맨드 구현 → `reports/YYYY-MM-DD.sell.md`
 
 ## v1.2 — 시각화/분석/품질 강화
 
@@ -61,6 +75,15 @@
 - [ ] 테스트 추가(지표/평가/리포트 단위 테스트)
 - [ ] 린터/포맷터(예: `uv add ruff`) 도입
 - [ ] 성능/리팩터링(로깅/병렬화/구조 개선)
+- [ ] 해외 주식(US) 지원(초판)
+  - [ ] 해외 일봉 조회 + 누적 수집
+  - [ ] 해외 스크리너(간단) + 시간대/휴장일 처리
+  - [ ] 환율/통화 표시(선택)
+- [ ] 장 오픈 진입 체크 기능
+  - [ ] `sab entry` 서브커맨드 설계/구현(전일 Buy Report + 시초가/장초 데이터)
+  - [ ] 갭-ATR 규칙(OK/Wait/Avoid) 및 5–15분 재확인 로직
+  - [ ] Entry 리포트(`YYYY-MM-DD.entry.md`) 생성
+  - [ ] launchd/cron 예시 추가
 
 ## 개발 편의(선택)
 

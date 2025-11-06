@@ -1,0 +1,43 @@
+# Example configuration for sab (swing alert bot)
+
+version: 1
+
+data:
+  provider: kis
+  screen_limit: 30
+  report_dir: reports
+  data_dir: data
+
+kis:
+  app_key: your_app_key
+  app_secret: your_app_secret
+  base_url: https://openapivts.koreainvestment.com
+  min_interval_ms: 500
+
+screener:
+  enabled: true
+  limit: 20
+  only: false
+  cache_ttl_minutes: 5
+  min_price: 1000
+  min_dollar_volume: 5000000000
+
+strategy:
+  use_sma200_filter: true
+  require_slope_up: true
+  gap_atr_multiplier: 1.0
+  min_history_bars: 200
+  exclude_etf_etn: true
+  rs_lookback_days: 60
+  rs_benchmark_return: 0.0
+
+entry_check:
+  enabled: false
+
+universe:
+  markets:
+    - KR
+    - US
+
+files:
+  holdings: holdings.yaml

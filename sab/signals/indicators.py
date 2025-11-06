@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from math import isnan
-from typing import Iterable, List, Tuple
+from typing import Iterable, List
 
 
 def ema(values: Iterable[float], period: int) -> List[float]:
@@ -69,3 +69,24 @@ def atr(
             out[i] = ((out[i - 1] * (period - 1)) + tr[i]) / period
     return out
 
+
+def sma(values: Iterable[float], period: int) -> List[float]:
+    vals = list(values)
+    n = len(vals)
+    if period <= 0 or n == 0:
+        return [float("nan")] * n
+    out: List[float] = [float("nan")] * n
+    window_sum = 0.0
+    for i, v in enumerate(vals):
+        if v is None or (isinstance(v, float) and isnan(v)):
+            window_sum += 0.0
+        else:
+            window_sum += v
+        if i >= period:
+            prev = vals[i - period]
+            if prev is None or (isinstance(prev, float) and isnan(prev)):
+                prev = 0.0
+            window_sum -= prev
+        if i >= period - 1:
+            out[i] = window_sum / period
+    return out

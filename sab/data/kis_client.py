@@ -61,6 +61,7 @@ class KISClient:
         session: Optional[requests.Session] = None,
         cache_dir: Optional[str] = None,
         max_attempts: int = 3,
+        min_interval: Optional[float] = None,
     ):
         self.creds = creds
         self.session = session or requests.Session()
@@ -70,6 +71,13 @@ class KISClient:
         self._token_cache_key = f"kis_token_{creds.env}"
         self.cache_status: Optional[str] = None
         self._max_attempts = max(1, max_attempts)
+        # throttle between requests (seconds)
+        self._min_interval = (
+            float(min_interval)
+            if min_interval is not None
+            else (0.5 if creds.env == "demo" else 0.1)
+        )
+        self._last_request_at: Optional[dt.datetime] = None
 
         self._try_load_cached_token()
 
@@ -124,6 +132,11 @@ class KISClient:
         resp: Optional[requests.Response] = None
 
         for attempt in range(self._max_attempts):
+            # simple client-side throttle
+            if self._min_interval and self._last_request_at is not None:
+                delta = (dt.datetime.utcnow() - self._last_request_at).total_seconds()
+                if delta < self._min_interval:
+                    time.sleep(self._min_interval - delta)
             try:
                 resp = self.session.request(
                     method,
@@ -133,6 +146,7 @@ class KISClient:
                     json=json,
                     timeout=timeout,
                 )
+                self._last_request_at = dt.datetime.utcnow()
             except requests.RequestException as exc:
                 last_exc = exc
             else:
@@ -235,21 +249,76 @@ class KISClient:
     # ------------------------------------------------------------------
     # Data fetch
     # ------------------------------------------------------------------
-    def daily_candles(self, ticker: str, *, count: int = 120, adjusted: bool = True) -> list[dict[str, Any]]:
+    def daily_candles(
+        self, ticker: str, *, count: int = 120, adjusted: bool = True
+    ) -> list[dict[str, Any]]:
         ticker = ticker.strip()
         if not ticker:
             raise KISClientError("Ticker is required")
 
         self.ensure_token()
 
-        today = dt.datetime.now().strftime("%Y%m%d")
-        start_date = (dt.datetime.now() - dt.timedelta(days=max(count * 2, 240))).strftime("%Y%m%d")
+        target = max(count, 1)
+        chunk_days = 240  # window size per call (~100 trading days)
+        collected: dict[str, dict[str, Any]] = {}
 
+        now = dt.datetime.now()
+        chunk_end = now
+        earliest_allowed = now - dt.timedelta(days=365 * 10)  # safety limit (~10y)
+        empty_streak = 0
+
+        while len(collected) < target and chunk_end > earliest_allowed:
+            start_dt = chunk_end - dt.timedelta(days=chunk_days)
+            if start_dt < earliest_allowed:
+                start_dt = earliest_allowed
+
+            start_str = start_dt.strftime("%Y%m%d")
+            end_str = chunk_end.strftime("%Y%m%d")
+
+            items = self._fetch_candle_chunk(
+                ticker=ticker,
+                start_date=start_str,
+                end_date=end_str,
+                adjusted=adjusted,
+            )
+
+            parsed_dates: list[str] = []
+            for item in items:
+                parsed = self._parse_candle(item)
+                if parsed and parsed.get("date"):
+                    collected[parsed["date"]] = parsed
+                    parsed_dates.append(parsed["date"])
+
+            if not parsed_dates:
+                empty_streak += 1
+                if empty_streak >= self._max_attempts:
+                    break
+                chunk_end = start_dt - dt.timedelta(days=1)
+                continue
+
+            empty_streak = 0
+            oldest_dt = min(dt.datetime.strptime(d, "%Y%m%d") for d in parsed_dates)
+            chunk_end = oldest_dt - dt.timedelta(days=1)
+
+        parsed = sorted(collected.values(), key=lambda x: x["date"])
+        if len(parsed) > target:
+            parsed = parsed[-target:]
+
+        return parsed
+
+    def _fetch_candle_chunk(
+        self,
+        *,
+        ticker: str,
+        start_date: str,
+        end_date: str,
+        adjusted: bool,
+    ) -> list[dict[str, Any]]:
         params = {
-            "FID_COND_MRKT_DIV_CODE": "J",  # 기본: KRX
+            "FID_COND_MRKT_DIV_CODE": "J",
             "FID_INPUT_ISCD": ticker,
             "FID_INPUT_DATE_1": start_date,
-            "FID_INPUT_DATE_2": today,
+            "FID_INPUT_DATE_2": end_date,
             "FID_PERIOD_DIV_CODE": "D",
             "FID_ORG_ADJ_PRC": "0" if adjusted else "1",
         }
@@ -263,34 +332,45 @@ class KISClient:
             "custtype": "P",
         }
 
-        try:
-            resp = self._request("GET", self.creds.candle_url, headers=headers, params=params)
-        except requests.RequestException as exc:  # pragma: no cover
-            raise KISClientError(f"Daily candle request failed: {exc}") from exc
+        data: dict[str, Any] | None = None
+        for attempt in range(self._max_attempts):
+            try:
+                resp = self._request(
+                    "GET", self.creds.candle_url, headers=headers, params=params
+                )
+            except requests.RequestException as exc:  # pragma: no cover
+                if attempt < self._max_attempts - 1:
+                    time.sleep(1.0)
+                    continue
+                raise KISClientError(f"Daily candle request failed: {exc}") from exc
 
-        if resp.status_code != 200:
-            raise KISClientError(f"Daily candle HTTP {resp.status_code}: {resp.text}")
+            if resp.status_code != 200:
+                if attempt < self._max_attempts - 1:
+                    time.sleep(1.0)
+                    continue
+                raise KISClientError(f"Daily candle HTTP {resp.status_code}: {resp.text}")
 
-        try:
-            data = resp.json()
-        except ValueError as exc:
-            raise KISClientError("Daily candle response is not JSON") from exc
+            try:
+                data = resp.json()
+            except ValueError as exc:
+                if attempt < self._max_attempts - 1:
+                    time.sleep(1.0)
+                    continue
+                raise KISClientError("Daily candle response is not JSON") from exc
 
-        if str(data.get("rt_cd")) != "0":
-            msg = data.get("msg1") or data.get("msg_cd") or "Unknown error"
-            raise KISClientError(f"KIS error: {msg}")
+            if str(data.get("rt_cd")) != "0":
+                msg_cd = data.get("msg_cd") or ""
+                msg1 = data.get("msg1") or "Unknown error"
+                if msg_cd == "EGW00201" and attempt < self._max_attempts - 1:
+                    time.sleep(max(1.0, self._min_interval))
+                    continue
+                raise KISClientError(f"KIS error: {msg1}")
+            break
 
-        items = data.get("output2") or []
-        parsed = [self._parse_candle(it) for it in items]
+        if not data:
+            return []
 
-        # API returns most recent first; reverse to oldest→newest
-        parsed = [c for c in parsed if c]
-        parsed.sort(key=lambda x: x["date"])
-
-        if len(parsed) > count:
-            parsed = parsed[-count:]
-
-        return parsed
+        return data.get("output2") or []
 
     @staticmethod
     def _parse_candle(item: dict[str, Any] | None) -> Optional[dict[str, Any]]:
@@ -370,19 +450,36 @@ class KISClient:
             if tr_cont:
                 hdrs["tr_cont"] = tr_cont
 
-            resp = self._request("GET", self.creds.volume_rank_url, headers=hdrs, params=params)
+            # Request with body-level rate limit handling
+            for attempt in range(self._max_attempts):
+                resp = self._request(
+                    "GET", self.creds.volume_rank_url, headers=hdrs, params=params
+                )
 
-            if resp.status_code != 200:
-                raise KISClientError(f"Volume rank HTTP {resp.status_code}: {resp.text}")
+                if resp.status_code != 200:
+                    if attempt < self._max_attempts - 1:
+                        time.sleep(1.0)
+                        continue
+                    raise KISClientError(
+                        f"Volume rank HTTP {resp.status_code}: {resp.text}"
+                    )
 
-            try:
-                data = resp.json()
-            except ValueError as exc:
-                raise KISClientError("Volume rank response is not JSON") from exc
+                try:
+                    data = resp.json()
+                except ValueError as exc:
+                    if attempt < self._max_attempts - 1:
+                        time.sleep(1.0)
+                        continue
+                    raise KISClientError("Volume rank response is not JSON") from exc
 
-            if str(data.get("rt_cd")) != "0":
-                msg = data.get("msg1") or data.get("msg_cd") or "Unknown error"
-                raise KISClientError(f"KIS volume rank error: {msg}")
+                if str(data.get("rt_cd")) != "0":
+                    msg_cd = data.get("msg_cd") or ""
+                    msg1 = data.get("msg1") or "Unknown error"
+                    if msg_cd == "EGW00201" and attempt < self._max_attempts - 1:
+                        time.sleep(max(1.0, self._min_interval))
+                        continue
+                    raise KISClientError(f"KIS volume rank error: {msg1}")
+                break
 
             items = data.get("output") or []
             parsed = [self._parse_rank_item(it) for it in items]

@@ -2,25 +2,49 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from .indicators import atr, ema, rsi
+from .indicators import atr, ema, rsi, sma
 
 
 @dataclass
 class EvaluationResult:
     ticker: str
-    candidate: Optional[Dict[str, str]]
+    candidate: Optional[Dict[str, Any]]
     reason: Optional[str] = None
+
+
+@dataclass
+class EvaluationSettings:
+    use_sma200_filter: bool = False
+    gap_atr_multiplier: float = 1.0
+    min_dollar_volume: float = 0.0
+    min_history_bars: int = 120
+    exclude_etf_etn: bool = False
+    require_slope_up: bool = False
+    rs_lookback_days: int = 20
+    rs_benchmark_return: float = 0.0
+    min_price: float = 0.0
 
 
 def _clean(values: List[float]) -> List[float]:
     return [v for v in values if not math.isnan(v)]
 
 
-def evaluate_ticker(ticker: str, candles: List[Dict[str, float]]) -> EvaluationResult:
-    if len(candles) < 60:
-        return EvaluationResult(ticker, None, "Not enough history (<60 bars)")
+def evaluate_ticker(
+    ticker: str,
+    candles: List[Dict[str, float]],
+    settings: EvaluationSettings,
+    meta: Optional[Dict[str, Any]] = None,
+) -> EvaluationResult:
+    meta = meta or {}
+
+    if len(candles) < settings.min_history_bars:
+        return EvaluationResult(
+            ticker,
+            None,
+            f"Not enough history (<{settings.min_history_bars} bars)",
+        )
 
     closes = [c["close"] for c in candles]
     highs = [c["high"] for c in candles]
@@ -33,9 +57,17 @@ def evaluate_ticker(ticker: str, candles: List[Dict[str, float]]) -> EvaluationR
     ema50 = ema(closes, 50)
     rsi14 = rsi(closes, 14)
     atr14 = atr(highs, lows, closes, 14)
+    sma200 = sma(closes, 200)
 
     latest = candles[-1]
     previous = candles[-2]
+
+    if settings.min_price and latest["close"] < settings.min_price:
+        return EvaluationResult(
+            ticker,
+            None,
+            f"Price {latest['close']:.0f} < MIN_PRICE {settings.min_price:.0f}",
+        )
 
     ema_cross_up = ema20[-1] > ema50[-1] and ema20[-2] <= ema50[-2]
     rsi_rebound = rsi14[-1] > 30 and rsi14[-2] <= 30
@@ -43,14 +75,84 @@ def evaluate_ticker(ticker: str, candles: List[Dict[str, float]]) -> EvaluationR
     gap_pct = 0.0
     if previous["close"]:
         gap_pct = (latest["open"] - previous["close"]) / previous["close"]
-    gap_ok = abs(gap_pct) <= 0.03
 
     atr_value = atr14[-1]
-    if math.isnan(atr_value) or atr_value <= 0:
-        atr_value = float("nan")
 
-    if not (ema_cross_up and rsi_rebound and rsi_not_overbought and gap_ok):
-        return EvaluationResult(ticker, None, "Did not meet signal criteria")
+    if not ema_cross_up:
+        return EvaluationResult(ticker, None, "EMA(20/50) cross not satisfied")
+    if not (rsi_rebound and rsi_not_overbought):
+        return EvaluationResult(ticker, None, "RSI signal not satisfied")
+
+    # SMA200 filter
+    trend_pass = True
+    sma200_value = sma200[-1]
+    if settings.use_sma200_filter:
+        trend_pass = (
+            not math.isnan(sma200_value)
+            and latest["close"] > sma200_value
+            and ema20[-1] > sma200_value
+            and ema50[-1] > sma200_value
+        )
+        if not trend_pass:
+            return EvaluationResult(ticker, None, "Below SMA200 filter")
+
+    # EMA slope requirement
+    slope_pass = True
+    if settings.require_slope_up:
+        slope_pass = ema20[-1] > ema20[-2] and ema50[-1] > ema50[-2]
+        if not slope_pass:
+            return EvaluationResult(ticker, None, "EMA slope not rising")
+
+    # Gap threshold via ATR multiplier
+    gap_threshold = 0.03
+    if (
+        settings.gap_atr_multiplier > 0
+        and not math.isnan(atr_value)
+        and atr_value > 0
+        and previous["close"] > 0
+    ):
+        gap_threshold = settings.gap_atr_multiplier * atr_value / previous["close"]
+    gap_ok = abs(gap_pct) <= gap_threshold
+    if not gap_ok:
+        return EvaluationResult(
+            ticker,
+            None,
+            f"Gap {gap_pct*100:.1f}% exceeds threshold",
+        )
+
+    # Liquidity: average dollar volume last 20 bars
+    avg_dollar_volume = 0.0
+    window = candles[-20:] if len(candles) >= 20 else candles
+    if window:
+        total = 0.0
+        count = 0
+        for c in window:
+            price = c.get("close") or 0.0
+            volume = c.get("volume") or 0.0
+            total += price * volume
+            count += 1
+        if count:
+            avg_dollar_volume = total / count
+    if settings.min_dollar_volume > 0 and avg_dollar_volume < settings.min_dollar_volume:
+        return EvaluationResult(
+            ticker,
+            None,
+            f"Avg dollar volume {avg_dollar_volume:,.0f} < {settings.min_dollar_volume:,.0f}",
+        )
+
+    # ETF/ETN exclusion heuristic
+    if settings.exclude_etf_etn:
+        name = str(meta.get("name", "")).upper()
+        if any(keyword in name for keyword in ["ETF", "ETN", "레버리지", "인버스"]):
+            return EvaluationResult(ticker, None, "ETF/ETN excluded")
+
+    rs_return = None
+    rs_diff = None
+    if settings.rs_lookback_days > 0 and len(closes) > settings.rs_lookback_days:
+        base_close = closes[-settings.rs_lookback_days - 1]
+        if base_close:
+            rs_return = (latest["close"] - base_close) / base_close
+            rs_diff = rs_return - settings.rs_benchmark_return
 
     pct_change = 0.0
     if previous["close"]:
@@ -69,23 +171,65 @@ def evaluate_ticker(ticker: str, candles: List[Dict[str, float]]) -> EvaluationR
         target = latest["close"] + atr_value * 2
         risk_guide = f"Stop {fmt(stop, 0)} / Target {fmt(target, 0)} (~1:2)"
 
-    score = rsi14[-1]
+    score = 0.0
+    breakdown: List[str] = []
+
+    score += 1
+    breakdown.append("ema_cross")
+
+    score += 1
+    breakdown.append("rsi")
+
+    if trend_pass:
+        score += 1
+        breakdown.append("sma200")
+
+    if slope_pass:
+        score += 1
+        breakdown.append("slope")
+
+    if gap_ok:
+        score += 1
+        breakdown.append("gap")
+
+    if avg_dollar_volume > 0:
+        score += 1
+        breakdown.append("liquidity")
+
+    if rs_return is not None:
+        if rs_diff is None or rs_diff >= 0:
+            score += 1
+            breakdown.append("rs")
+        else:
+            breakdown.append("rs_below")
+
+    score_display = f"{score:.1f}"
+    score_notes = ", ".join(breakdown)
 
     candidate = {
         "ticker": ticker,
-        "name": ticker,
+        "name": meta.get("name", ticker),
         "price": fmt(latest["close"], 0),
         "ema20": fmt(ema20[-1]),
         "ema50": fmt(ema50[-1]),
         "rsi14": fmt(rsi14[-1]),
-        "rsi14_value": rsi14[-1],
         "atr14": fmt(atr_value),
         "gap": f"{gap_pct*100:.1f}%",
+        "gap_threshold": f"{gap_threshold*100:.1f}%",
         "pct_change": f"{pct_change*100:.1f}%",
         "high": fmt(latest["high"], 0),
         "low": fmt(latest["low"], 0),
         "risk_guide": risk_guide,
-        "score": score,
+        "sma200": fmt(sma200_value if not math.isnan(sma200_value) else float("nan"), 0),
+        "avg_dollar_volume": fmt(avg_dollar_volume, 0),
+        "rs_return": f"{rs_return*100:.1f}%" if rs_return is not None else "-",
+        "rs_diff": f"{rs_diff*100:.1f}%" if rs_diff is not None else "-",
+        "rs_benchmark": f"{settings.rs_benchmark_return*100:.1f}%",
+        "score": score_display,
+        "score_value": score,
+        "score_notes": score_notes,
+        "trend_pass": "Yes" if trend_pass else "No",
+        "slope_pass": "Yes" if slope_pass else "No",
     }
 
     return EvaluationResult(ticker, candidate)

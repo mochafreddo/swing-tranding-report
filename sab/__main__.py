@@ -22,6 +22,14 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, default=None, help="Max tickers to evaluate")
     s.add_argument("--watchlist", type=str, default=None, help="Path to watchlist file")
     s.add_argument("--provider", type=str, default=None, choices=["kis", "pykrx"], help="Data provider override")
+    s.add_argument("--screener-limit", type=int, default=None, help="Override screener top-N size")
+    s.add_argument(
+        "--universe",
+        type=str,
+        default=None,
+        choices=["watchlist", "screener", "both"],
+        help="Universe selection: watchlist only, screener only, or both",
+    )
     return p
 
 
@@ -32,7 +40,13 @@ def main(argv: list[str] | None = None) -> int:
     ns = parser.parse_args(argv)
 
     if ns.cmd == "scan":
-        return run_scan(limit=ns.limit, watchlist_path=ns.watchlist, provider=ns.provider)
+        return run_scan(
+            limit=ns.limit,
+            watchlist_path=ns.watchlist,
+            provider=ns.provider,
+            screener_limit=ns.screener_limit,
+            universe=ns.universe,
+        )
 
     parser.print_help()
     return 2
