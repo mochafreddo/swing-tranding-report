@@ -66,3 +66,9 @@ universe:
 
 files:
   holdings: holdings.yaml
+
+fx:
+  mode: kis
+  cache_ttl_minutes: 10
+  kis_symbol: AAPL.NAS
+  usdkrw: 1320.0

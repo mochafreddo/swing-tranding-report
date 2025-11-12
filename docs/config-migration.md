@@ -39,6 +39,9 @@
 | `US_SCREENER_LIMIT` | `screener.us_limit` |
 | (없음) | `screener.us.min_price` (USD 기준) |
 | (없음) | `screener.us.min_dollar_volume` (USD 기준) |
+| `FX_MODE` | `fx.mode` |
+| `FX_CACHE_TTL` | `fx.cache_ttl_minutes` |
+| `FX_KIS_SYMBOL` | `fx.kis_symbol` |
 | `USD_KRW_RATE` | `fx.usdkrw` |
 | `SELL_ATR_MULTIPLIER` | `sell.atr_trail_multiplier` |
 | `SELL_TIME_STOP_DAYS` | `sell.time_stop_days` |

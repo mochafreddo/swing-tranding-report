@@ -70,4 +70,7 @@ files:
   holdings: holdings.yaml
 
 fx:
-  usdkrw: 1320.0  # 선택: 1 USD ≈ 1,320 KRW
+  mode: kis              # kis | manual | off
+  cache_ttl_minutes: 10  # FX 캐시 유지 시간(분)
+  kis_symbol: AAPL.NAS   # 선택: 환율 조회용 대표 종목 (없으면 자동 추정)
+  usdkrw: 1320.0         # manual 모드 또는 폴백용 고정 환율

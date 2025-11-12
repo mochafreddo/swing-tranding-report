@@ -40,7 +40,10 @@
   - `MIN_PRICE=1000` (스크리너 최소 가격 필터)
   - `RS_LOOKBACK_DAYS=60` (상대강도 계산 기간)
   - `RS_BENCHMARK_RETURN=0.0` (비교 기준 수익률, 소수로 입력 ex 0.05)
-  - `USD_KRW_RATE=1320` (선택: 미국 종목을 KRW로 병기할 때 사용)
+  - `FX_MODE=kis` (선택: 환율 소스 `kis|manual|off`, 기본 manual)
+  - `FX_CACHE_TTL=10` (선택: KIS 환율 캐시 TTL 분 단위)
+  - `FX_KIS_SYMBOL=AAPL.NAS` (선택: 환율 조회용 대표 USD 종목)
+  - `USD_KRW_RATE=1320` (선택: manual 모드나 폴백용 고정 환율)
   - (선택) Sell 규칙 커스터마이즈:
     - `SELL_ATR_MULTIPLIER=1.0`
     - `SELL_TIME_STOP_DAYS=10`
@@ -70,7 +73,12 @@
   - `kis`: KIS 해외 랭킹 API(거래량/시가총액/거래대금 순위) 사용
   - `defaults`: 설정의 기본 유니버스(`screener.us_defaults`)에서 상위 N 선택
 - 미국 시장 시간대는 EST/EDT 기준(09:30–16:00)이며, 스크리너 메타데이터에 시장 상태(open/closed)를 표기합니다.
-- 환율/통화 병기: `USD_KRW_RATE`를 지정하면 Buy 리포트에서 USD 가격과 원화 환산 값을 함께 보여줍니다.
+- 환율/통화 병기: `FX_MODE=kis`로 두면 KIS 해외 현재가상세에서 실시간 환율(`t_rate`)을 읽어 자동 적용합니다. `USD_KRW_RATE`는 manual 모드나 폴백으로 사용됩니다.
+- `FX_MODE` 상세
+  - `kis` (권장): `/uapi/overseas-price/v1/quotations/price-detail` 호출로 `t_rate`(당일환율)를 조회하고 `FX_CACHE_TTL` 분 동안 캐시합니다. `FX_KIS_SYMBOL`로 환율 조회용 심볼을 지정하거나, 자동으로 첫 USD 후보를 사용합니다.
+  - `manual`: `USD_KRW_RATE` 또는 `config.yaml`의 `fx.usdkrw` 값을 그대로 사용.
+  - `off`: 환율을 무시하고 USD 금액만 출력합니다.
+  - 어떤 모드든 KIS 호출 실패 시 `USD_KRW_RATE` 값이 있으면 폴백하며, 값이 없으면 리포트 Appendix에 경고가 추가됩니다.
 - 휴장일: KIS 해외 휴일 API(`countries-holiday`)를 조회해 휴일/조기폐장 여부를 메타데이터에 표시합니다.
 
 Per‑market 임계치(권장)

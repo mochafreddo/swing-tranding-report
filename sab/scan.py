@@ -23,6 +23,7 @@ from .screener.kis_overseas_screener import (
     ScreenRequest as KUSReq,
 )
 from .utils.market_time import us_market_status
+from .fx import resolve_fx_rate
 
 
 def _infer_env_from_base(base_url: str) -> str:
@@ -53,7 +54,11 @@ def _to_float(value: Any) -> Optional[float]:
         return None
 
 
-def _apply_currency_display(candidate: Dict[str, Any], fx_rate: Optional[float]) -> None:
+def _apply_currency_display(
+    candidate: Dict[str, Any],
+    fx_rate: Optional[float],
+    fx_meta_note: Optional[str],
+) -> None:
     currency = candidate.get("currency", "KRW")
     price_value = _to_float(candidate.get("price_value"))
     if price_value is None:
@@ -65,7 +70,10 @@ def _apply_currency_display(candidate: Dict[str, Any], fx_rate: Optional[float])
         if fx_rate:
             converted = price_value * fx_rate
             candidate["price_converted"] = converted
-            candidate["fx_note"] = f"1 USD ≈ ₩{fx_rate:,.0f}"
+            note = f"1 USD ≈ ₩{fx_rate:,.0f}"
+            if fx_meta_note:
+                note += f" ({fx_meta_note})"
+            candidate["fx_note"] = note
             display += f" (₩{converted:,.0f})"
         candidate["price"] = display
     else:
@@ -255,6 +263,19 @@ def run_scan(
         return mapping.get(suffix, None)
 
     ticker_currency: Dict[str, str] = {t: _infer_currency(t) for t in tickers}
+    fx_rate: Optional[float] = None
+    fx_meta_note: Optional[str] = None
+    resolved_rate, resolved_note, fx_messages = resolve_fx_rate(
+        cfg=cfg,
+        ticker_currency=ticker_currency,
+        tickers=tickers,
+        kis_client=kis_client,
+        logger=logger,
+    )
+    fx_rate = resolved_rate
+    fx_meta_note = resolved_note
+    if fx_messages:
+        failures.extend(fx_messages)
 
     us_holidays_cache: Dict[str, HolidayEntry] = {}
     latest_dates: Dict[str, str] = {}
@@ -429,8 +450,8 @@ def run_scan(
             continue
         meta = dict(screener_meta_map.get(ticker, {}))
         meta["currency"] = ticker_currency.get(ticker, "KRW")
-        if cfg.usd_krw_rate:
-            meta["usd_krw_rate"] = cfg.usd_krw_rate
+        if fx_rate is not None:
+            meta["usd_krw_rate"] = fx_rate
         result = evaluate_ticker(ticker, candles, eval_settings, meta)
         if result.candidate:
             candidates.append(result.candidate)
@@ -441,7 +462,7 @@ def run_scan(
     candidates.sort(key=lambda c: c.get("score_value", 0.0), reverse=True)
 
     for candidate in candidates:
-        _apply_currency_display(candidate, cfg.usd_krw_rate)
+        _apply_currency_display(candidate, fx_rate, fx_meta_note)
         if candidate.get("currency", "KRW").upper() == "USD":
             holiday_entry: Optional[HolidayEntry] = None
             date_key = latest_dates.get(candidate.get("ticker", ""))

@@ -68,6 +68,9 @@ class Config:
     us_screener_metric: str = "volume"  # 'volume' | 'market_cap' | 'value'
     us_screener_limit: int = 20
     usd_krw_rate: Optional[float] = None
+    fx_mode: str = "manual"  # 'manual' | 'kis' | 'off'
+    fx_cache_ttl_minutes: float = 10.0
+    fx_kis_symbol: Optional[str] = None
     # Per-market thresholds
     us_min_price: Optional[float] = None
     us_min_dollar_volume: Optional[float] = None
@@ -240,6 +243,14 @@ def load_config(
             except (TypeError, ValueError):
                 usd_krw_rate = None
 
+    fx_mode_raw = os.getenv("FX_MODE") or from_yaml("fx.mode", "manual") or "manual"
+    fx_mode = str(fx_mode_raw).strip().lower()
+    if fx_mode not in {"manual", "kis", "off"}:
+        fx_mode = "manual"
+    fx_cache_ttl_minutes = env_float("FX_CACHE_TTL", "fx.cache_ttl_minutes", 10.0)
+    fx_kis_symbol_raw = env_str("FX_KIS_SYMBOL", "fx.kis_symbol", None)
+    fx_kis_symbol = fx_kis_symbol_raw.strip().upper() if fx_kis_symbol_raw else None
+
     # Per-market thresholds (USD units for US)
     us_min_price = None
     _us_min_price_yaml = from_yaml("screener.us.min_price")
@@ -306,6 +317,9 @@ def load_config(
         us_screener_metric=us_screener_metric,
         us_screener_limit=us_screener_limit,
         usd_krw_rate=usd_krw_rate,
+        fx_mode=fx_mode,
+        fx_cache_ttl_minutes=fx_cache_ttl_minutes,
+        fx_kis_symbol=fx_kis_symbol,
         us_min_price=us_min_price,
         us_min_dollar_volume=us_min_dollar_volume,
     )

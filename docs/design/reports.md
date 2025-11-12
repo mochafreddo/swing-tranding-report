@@ -20,7 +20,7 @@
 
 - 후보 테이블: Ticker | Name | Price | EMA20 | EMA50 | RSI14 | ATR14 | Gap | Score
 - 후보 상세: 가격 스냅샷, EMA/SMA200 컨텍스트, RSI, ATR, 갭 임계, 유동성 요약, 리스크 가이드(ATR 스톱), 스코어 노트
-- 해외 종목: `USD_KRW_RATE`가 설정되어 있으면 USD 가격과 원화 환산 값을 병기하고, 환율(1 USD ≈ ₩X) 메모를 추가
+- 해외 종목: `FX_MODE=kis`일 때 KIS `price-detail`에서 실시간 환율을 가져와 USD 가격과 원화 환산 값을 병기하며, 환율(1 USD ≈ ₩X, 소스/캐시 상태 포함) 메모를 추가한다. 실패 시 `USD_KRW_RATE` 값으로 폴백하거나 환율 미표시 경고를 Appendix에 남긴다.
 - Appendix: 실패/보류(예: 히스토리 부족, SMA200 필터, ETF 제외, API 오류 및 폴백 기록)
 
 ## Sell/Review Report

@@ -66,6 +66,10 @@ class KISCredentials:
         # v1 해외주식-017 해외결제일자조회 (countries-holiday)
         return f"{self.base_url.rstrip('/')}/uapi/overseas-stock/v1/quotations/countries-holiday"
 
+    @property
+    def overseas_price_detail_url(self) -> str:
+        return f"{self.base_url.rstrip('/')}/uapi/overseas-price/v1/quotations/price-detail"
+
     def overseas_volume_rank_url(self) -> str:
         return f"{self.base_url.rstrip('/')}/uapi/overseas-stock/v1/ranking/trade-vol"
 
@@ -330,6 +334,68 @@ class KISClient:
             parsed = parsed[-target:]
 
         return parsed
+
+    def overseas_price_detail(self, *, symbol: str, exchange: str) -> dict[str, Any]:
+        symbol = (symbol or "").strip().upper()
+        exchange = (exchange or "").strip().upper()
+        if not symbol or not exchange:
+            raise KISClientError("Symbol and exchange are required for price detail")
+
+        self.ensure_token()
+
+        params = {
+            "AUTH": "",
+            "EXCD": exchange,
+            "SYMB": symbol,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": self._access_token,
+            "appkey": self.creds.app_key,
+            "appsecret": self.creds.app_secret,
+            "tr_id": "HHDFS76200200",
+            "custtype": "P",
+        }
+
+        for attempt in range(self._max_attempts):
+            resp = self._request(
+                "GET",
+                self.creds.overseas_price_detail_url,
+                headers=headers,
+                params=params,
+            )
+
+            if resp.status_code != 200:
+                if attempt < self._max_attempts - 1:
+                    time.sleep(1.0)
+                    continue
+                raise KISClientError(f"Overseas price detail HTTP {resp.status_code}: {resp.text}")
+
+            try:
+                data = resp.json()
+            except ValueError as exc:
+                if attempt < self._max_attempts - 1:
+                    time.sleep(1.0)
+                    continue
+                raise KISClientError("Overseas price detail response is not JSON") from exc
+
+            if str(data.get("rt_cd")) != "0":
+                msg_cd = data.get("msg_cd") or ""
+                msg1 = data.get("msg1") or "Unknown error"
+                if msg_cd == "EGW00201" and attempt < self._max_attempts - 1:
+                    time.sleep(max(1.0, self._min_interval))
+                    continue
+                raise KISClientError(f"KIS overseas price detail error: {msg1}")
+
+            output = data.get("output")
+            if isinstance(output, list):
+                return output[0] if output else {}
+            if isinstance(output, dict):
+                return output
+            return {}
+
+        # If loop exits without return, raise generic error
+        raise KISClientError("Overseas price detail request failed after retries")
 
     def _fetch_candle_chunk(
         self,

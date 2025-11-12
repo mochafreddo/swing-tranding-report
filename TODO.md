@@ -78,7 +78,7 @@
 - [ ] 해외 주식(US) 지원(초판)
   - [x] 해외 일봉 조회 + 누적 수집
   - [x] 해외 스크리너(간단) + 시간대/휴장일 처리
-  - [x] 환율/통화 표시(선택)
+  - [x] 환율/통화 표시(선택, KIS price-detail 기반 자동 환율 + 캐시)
   - [x] 시장별 임계치 분리(US: USD 기준 min_price/min_dollar_volume)
   - [x] KIS 휴장일 API 연동 및 메타데이터 반영(휴일/조기폐장 표기)
 - [ ] 장 오픈 진입 체크 기능
@@ -93,6 +93,7 @@
   - [ ] `sab/data/kis_client._request` 재시도/백오프: `requests.Session.request`를 monkeypatch하여 `ReadTimeout`/429/EGW00201 시나리오를 시뮬레이션
   - [ ] `sab/screener/kis_screener.py` 스크리너 타임아웃/오류 처리: KIS 호출 실패 시 예외 전파/로그/리포트 반영 검증(현재 설계 점검: 필요 시 try/except로 경고+빈 결과로 전환)
   - [x] 휴장일 캐시 병합: `sab/data/holiday_cache.merge_holidays` 입력 레코드 스키마 변형에 대한 견고성 테스트(필드 누락/이름 차이)
+  - [ ] FX 리졸버: `sab/fx.resolve_fx_rate`의 KIS/캐시/수동 폴백 분기 검증
   - [ ] 평가기: 시장별 임계치 적용(USD vs KRW)과 메시지 정확성(가격/거래대금 미달 사유), 환율 병기 포맷
   - [ ] 리포트 빌더: `market_status`/환율 병기 라인, 오류/경고 Appendix 표기
 
