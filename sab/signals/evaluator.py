@@ -19,12 +19,14 @@ class EvaluationSettings:
     use_sma200_filter: bool = False
     gap_atr_multiplier: float = 1.0
     min_dollar_volume: float = 0.0
+    us_min_dollar_volume: float | None = None
     min_history_bars: int = 120
     exclude_etf_etn: bool = False
     require_slope_up: bool = False
     rs_lookback_days: int = 20
     rs_benchmark_return: float = 0.0
     min_price: float = 0.0
+    us_min_price: float | None = None
 
 
 def _clean(values: List[float]) -> List[float]:
@@ -38,6 +40,7 @@ def evaluate_ticker(
     meta: Optional[Dict[str, Any]] = None,
 ) -> EvaluationResult:
     meta = meta or {}
+    currency = meta.get("currency", "KRW")
 
     if len(candles) < settings.min_history_bars:
         return EvaluationResult(
@@ -62,11 +65,16 @@ def evaluate_ticker(
     latest = candles[-1]
     previous = candles[-2]
 
-    if settings.min_price and latest["close"] < settings.min_price:
+    # Market-aware price floor
+    eff_min_price = settings.min_price
+    if meta.get("currency", "KRW").upper() == "USD" and settings.us_min_price:
+        eff_min_price = settings.us_min_price
+
+    if eff_min_price and latest["close"] < eff_min_price:
         return EvaluationResult(
             ticker,
             None,
-            f"Price {latest['close']:.0f} < MIN_PRICE {settings.min_price:.0f}",
+            f"Price {latest['close']:.0f} < MIN_PRICE {eff_min_price:.0f}",
         )
 
     ema_cross_up = ema20[-1] > ema50[-1] and ema20[-2] <= ema50[-2]
@@ -133,11 +141,15 @@ def evaluate_ticker(
             count += 1
         if count:
             avg_dollar_volume = total / count
-    if settings.min_dollar_volume > 0 and avg_dollar_volume < settings.min_dollar_volume:
+    # Market-aware liquidity floor (USD for US, KRW for KR)
+    eff_min_dv = settings.min_dollar_volume
+    if meta.get("currency", "KRW").upper() == "USD" and settings.us_min_dollar_volume:
+        eff_min_dv = settings.us_min_dollar_volume
+    if eff_min_dv > 0 and avg_dollar_volume < eff_min_dv:
         return EvaluationResult(
             ticker,
             None,
-            f"Avg dollar volume {avg_dollar_volume:,.0f} < {settings.min_dollar_volume:,.0f}",
+            f"Avg dollar volume {avg_dollar_volume:,.0f} < {eff_min_dv:,.0f}",
         )
 
     # ETF/ETN exclusion heuristic
@@ -230,6 +242,8 @@ def evaluate_ticker(
         "score_notes": score_notes,
         "trend_pass": "Yes" if trend_pass else "No",
         "slope_pass": "Yes" if slope_pass else "No",
+        "currency": currency,
+        "price_value": latest["close"],
     }
 
     return EvaluationResult(ticker, candidate)

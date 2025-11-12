@@ -1,4 +1,4 @@
-# Example configuration for sab (swing alert bot)
+# sab configuration
 
 version: 1
 
@@ -9,9 +9,7 @@ data:
   data_dir: data
 
 kis:
-  app_key: your_app_key
-  app_secret: your_app_secret
-  base_url: https://openapivts.koreainvestment.com
+  base_url: https://openapi.koreainvestment.com
   min_interval_ms: 500
 
 screener:
@@ -21,22 +19,22 @@ screener:
   cache_ttl_minutes: 5
   min_price: 1000
   min_dollar_volume: 5000000000
-  us:
-    min_price: 5         # USD 기준 최소 가격
-    min_dollar_volume: 5_000_000  # USD 기준(예: 500만 달러)
-  # US simple screener defaults (optional)
-  us_defaults:
+  # US-specific screener settings and thresholds
+  us_mode: kis           # 'kis' to use KIS screener; 'defaults' to use us_defaults list
+  us_metric: volume      # 'volume' | 'market_cap' | 'value' (used when us_mode=kis)
+  us_limit: 20
+  us_defaults:           # used when us_mode='defaults' or KIS falls back
     - AAPL.US
     - MSFT.US
     - NVDA.US
     - AMZN.US
     - META.US
     - GOOGL.US
-  # US screener mode: 'defaults' or 'kis' (KIS rank APIs)
-  us_mode: defaults
-  # US KIS rank metric: 'volume' | 'market_cap' | 'value'
-  us_metric: volume
-  us_limit: 20
+  us:
+    min_price: 5
+    min_dollar_volume: 5000000
+
+
 
 strategy:
   use_sma200_filter: true
@@ -68,6 +66,3 @@ universe:
 
 files:
   holdings: holdings.yaml
-
-fx:
-  usdkrw: 1320.0  # 선택: 1 USD ≈ 1,320 KRW

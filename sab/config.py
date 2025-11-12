@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
+from typing import Any, Optional, overload
 from urllib.parse import urlparse
 
 from .config_loader import load_yaml_config
@@ -63,6 +62,15 @@ class Config:
     sell_rsi_floor: float = 50.0
     sell_rsi_floor_alt: float = 30.0
     sell_min_bars: int = 20
+    universe_markets: list[str] = field(default_factory=lambda: ["KR"])  # e.g., ["KR", "US"]
+    us_screener_defaults: list[str] = field(default_factory=list)
+    us_screener_mode: str = "defaults"  # 'defaults' or 'kis'
+    us_screener_metric: str = "volume"  # 'volume' | 'market_cap' | 'value'
+    us_screener_limit: int = 20
+    usd_krw_rate: Optional[float] = None
+    # Per-market thresholds
+    us_min_price: Optional[float] = None
+    us_min_dollar_volume: Optional[float] = None
 
 
 def _normalize_kis_base(url: Optional[str]) -> Optional[str]:
@@ -119,6 +127,14 @@ def load_config(
         except (TypeError, ValueError):
             return default
 
+    @overload
+    def parse_float(val: Any, default: float) -> float:
+        ...
+
+    @overload
+    def parse_float(val: Any, default: None) -> float | None:
+        ...
+
     def parse_float(val: Any, default: float | None) -> float | None:
         try:
             return float(val)
@@ -152,7 +168,12 @@ def load_config(
             return default
         return str(val)
 
-    provider = provider_override or os.getenv("DATA_PROVIDER") or from_yaml("data.provider", "kis") or "kis"
+    provider = (
+        provider_override
+        or os.getenv("DATA_PROVIDER")
+        or from_yaml("data.provider", "kis")
+        or "kis"
+    )
     provider = provider.lower()
     screen_limit_cfg = env_int("SCREEN_LIMIT", "data.screen_limit", 30)
 
@@ -187,6 +208,54 @@ def load_config(
 
     holdings_path = env_str("HOLDINGS_FILE", "files.holdings", None)
     holdings_data = load_holdings(holdings_path)
+
+    # Universe markets (KR,US)
+    markets_env = os.getenv("UNIVERSE_MARKETS")
+    if markets_env is not None:
+        universe_markets = [m.strip().upper() for m in markets_env.split(",") if m.strip()]
+    else:
+        raw_markets = from_yaml("universe.markets", ["KR"]) or ["KR"]
+        universe_markets = [str(m).strip().upper() for m in raw_markets if str(m).strip()]
+
+    # US screener defaults (yaml-only)
+    us_screener_defaults_raw = from_yaml("screener.us_defaults", []) or []
+    us_screener_defaults = [
+        str(t).strip().upper() for t in us_screener_defaults_raw if str(t).strip()
+    ]
+    us_screener_mode = str(from_yaml("screener.us_mode", "defaults") or "defaults").strip().lower()
+    us_screener_metric = str(from_yaml("screener.us_metric", "volume") or "volume").strip().lower()
+    us_screener_limit = env_int("US_SCREENER_LIMIT", "screener.us_limit", 20)
+    usd_krw_rate: Optional[float] = None
+    env_fx = os.getenv("USD_KRW_RATE")
+    if env_fx is not None:
+        try:
+            usd_krw_rate = float(env_fx)
+        except (TypeError, ValueError):
+            usd_krw_rate = None
+    else:
+        fx_yaml = from_yaml("fx.usdkrw")
+        if fx_yaml is not None:
+            try:
+                usd_krw_rate = float(fx_yaml)
+            except (TypeError, ValueError):
+                usd_krw_rate = None
+
+    # Per-market thresholds (USD units for US)
+    us_min_price = None
+    _us_min_price_yaml = from_yaml("screener.us.min_price")
+    if _us_min_price_yaml is not None:
+        try:
+            us_min_price = float(_us_min_price_yaml)
+        except (TypeError, ValueError):
+            us_min_price = None
+
+    us_min_dollar_volume = None
+    _us_min_dv_yaml = from_yaml("screener.us.min_dollar_volume")
+    if _us_min_dv_yaml is not None:
+        try:
+            us_min_dollar_volume = float(_us_min_dv_yaml)
+        except (TypeError, ValueError):
+            us_min_dollar_volume = None
 
     sell_atr_multiplier = env_float("SELL_ATR_MULTIPLIER", "sell.atr_trail_multiplier", 1.0)
     sell_time_stop_days = env_int("SELL_TIME_STOP_DAYS", "sell.time_stop_days", 10)
@@ -231,6 +300,14 @@ def load_config(
         sell_rsi_floor=sell_rsi_floor,
         sell_rsi_floor_alt=sell_rsi_floor_alt,
         sell_min_bars=sell_min_bars,
+        universe_markets=universe_markets,
+        us_screener_defaults=us_screener_defaults,
+        us_screener_mode=us_screener_mode,
+        us_screener_metric=us_screener_metric,
+        us_screener_limit=us_screener_limit,
+        usd_krw_rate=usd_krw_rate,
+        us_min_price=us_min_price,
+        us_min_dollar_volume=us_min_dollar_volume,
     )
 
 

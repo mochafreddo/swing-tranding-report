@@ -36,6 +36,10 @@
 | `RS_BENCHMARK_RETURN` | `strategy.rs_benchmark_return` |
 | `ENTRY_CHECK_ENABLED` | `entry_check.enabled` |
 | `UNIVERSE_MARKETS` | `universe.markets` (리스트) |
+| `US_SCREENER_LIMIT` | `screener.us_limit` |
+| (없음) | `screener.us.min_price` (USD 기준) |
+| (없음) | `screener.us.min_dollar_volume` (USD 기준) |
+| `USD_KRW_RATE` | `fx.usdkrw` |
 | `SELL_ATR_MULTIPLIER` | `sell.atr_trail_multiplier` |
 | `SELL_TIME_STOP_DAYS` | `sell.time_stop_days` |
 | `SELL_REQUIRE_SMA200` | `sell.require_sma200` |

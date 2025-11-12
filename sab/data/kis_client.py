@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import datetime as dt
+import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import requests
-
-import time
 
 from .cache import load_json, save_json
 
@@ -49,6 +48,32 @@ class KISCredentials:
     @property
     def volume_rank_tr_id(self) -> str:
         return "FHPST01710000"
+
+    # Overseas
+    @property
+    def overseas_candle_url(self) -> str:
+        # KIS Overseas period (daily) price endpoint
+        # v1_해외주식-010: /overseas-price/v1/quotations/dailyprice
+        return f"{self.base_url.rstrip('/')}/uapi/overseas-price/v1/quotations/dailyprice"
+
+    @property
+    def overseas_tr_id(self) -> str:
+        # TR ID for overseas dailyprice (v1_해외주식-010)
+        return "HHDFS76240000"
+
+    @property
+    def overseas_holiday_url(self) -> str:
+        # v1 해외주식-017 해외결제일자조회 (countries-holiday)
+        return f"{self.base_url.rstrip('/')}/uapi/overseas-stock/v1/quotations/countries-holiday"
+
+    def overseas_volume_rank_url(self) -> str:
+        return f"{self.base_url.rstrip('/')}/uapi/overseas-stock/v1/ranking/trade-vol"
+
+    def overseas_trade_value_rank_url(self) -> str:
+        return f"{self.base_url.rstrip('/')}/uapi/overseas-stock/v1/ranking/trade-pbmn"
+
+    def overseas_market_cap_rank_url(self) -> str:
+        return f"{self.base_url.rstrip('/')}/uapi/overseas-stock/v1/ranking/market-cap"
 
 
 class KISClient:
@@ -335,9 +360,7 @@ class KISClient:
         data: dict[str, Any] | None = None
         for attempt in range(self._max_attempts):
             try:
-                resp = self._request(
-                    "GET", self.creds.candle_url, headers=headers, params=params
-                )
+                resp = self._request("GET", self.creds.candle_url, headers=headers, params=params)
             except requests.RequestException as exc:  # pragma: no cover
                 if attempt < self._max_attempts - 1:
                     time.sleep(1.0)
@@ -351,26 +374,252 @@ class KISClient:
                 raise KISClientError(f"Daily candle HTTP {resp.status_code}: {resp.text}")
 
             try:
-                data = resp.json()
+                parsed = resp.json()
             except ValueError as exc:
                 if attempt < self._max_attempts - 1:
                     time.sleep(1.0)
                     continue
                 raise KISClientError("Daily candle response is not JSON") from exc
 
-            if str(data.get("rt_cd")) != "0":
-                msg_cd = data.get("msg_cd") or ""
-                msg1 = data.get("msg1") or "Unknown error"
+            if not isinstance(parsed, dict):
+                raise KISClientError("Daily candle response payload is not an object")
+
+            data = parsed
+
+            if str(parsed.get("rt_cd")) != "0":
+                msg_cd = parsed.get("msg_cd") or ""
+                msg1 = parsed.get("msg1") or "Unknown error"
                 if msg_cd == "EGW00201" and attempt < self._max_attempts - 1:
                     time.sleep(max(1.0, self._min_interval))
                     continue
                 raise KISClientError(f"KIS error: {msg1}")
             break
 
-        if not data:
+        if data is None:
             return []
 
         return data.get("output2") or []
+
+    # ------------------------------------------------------------------
+    # Holidays
+    # ------------------------------------------------------------------
+    def overseas_holidays(
+        self,
+        *,
+        country_code: str = "US",
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, Any]]:
+        """Fetch overseas holiday/settlement schedule.
+
+        Note: KIS provides countries-holiday API (해외결제일자조회) which takes a
+        single reference date (TRAD_DT) and returns schedule rows. We call it
+        with start_date and return its output; end_date is unused.
+        """
+        self.ensure_token()
+
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": self._access_token,
+            "appkey": self.creds.app_key,
+            "appsecret": self.creds.app_secret,
+            "tr_id": "CTOS5011R",
+            "custtype": "P",
+        }
+
+        params = {
+            "TRAD_DT": start_date,
+            "CTX_AREA_NK": "",
+            "CTX_AREA_FK": "",
+        }
+
+        try:
+            resp = self._request(
+                "GET", self.creds.overseas_holiday_url, headers=headers, params=params
+            )
+        except requests.RequestException as exc:  # pragma: no cover
+            raise KISClientError(f"Overseas holiday request failed: {exc}") from exc
+
+        if resp.status_code != 200:
+            raise KISClientError(f"Overseas holiday HTTP {resp.status_code}: {resp.text}")
+
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise KISClientError("Overseas holiday response is not JSON") from exc
+
+        if str(data.get("rt_cd")) != "0":
+            msg = data.get("msg1") or data.get("msg_cd") or "Unknown error"
+            raise KISClientError(f"KIS overseas holiday error: {msg}")
+
+        items = data.get("output") or []
+        if not isinstance(items, list):
+            items = [items]
+        return items
+
+    # ------------------------------------------------------------------
+    # Overseas daily candles (US etc.) with accumulation
+    # ------------------------------------------------------------------
+    def overseas_daily_candles(
+        self,
+        *,
+        symbol: str,
+        exchange: str = "NASD",
+        count: int = 120,
+        adjusted: bool = True,
+    ) -> list[dict[str, Any]]:
+        symbol = symbol.strip().upper()
+        exchange = exchange.strip().upper()
+        if not symbol or not exchange:
+            raise KISClientError("Overseas symbol and exchange are required")
+
+        self.ensure_token()
+
+        target = max(count, 1)
+        chunk_days = 240
+        collected: dict[str, dict[str, Any]] = {}
+
+        now = dt.datetime.now()
+        chunk_end = now
+        earliest_allowed = now - dt.timedelta(days=365 * 10)
+        empty_streak = 0
+
+        while len(collected) < target and chunk_end > earliest_allowed:
+            start_dt = chunk_end - dt.timedelta(days=chunk_days)
+            if start_dt < earliest_allowed:
+                start_dt = earliest_allowed
+            start_str = start_dt.strftime("%Y%m%d")
+            end_str = chunk_end.strftime("%Y%m%d")
+
+            items = self._fetch_overseas_candle_chunk(
+                symbol=symbol,
+                exchange=exchange,
+                start_date=start_str,
+                end_date=end_str,
+                adjusted=adjusted,
+            )
+
+            parsed_dates: list[str] = []
+            for it in items:
+                parsed = self._parse_overseas_candle(it)
+                if parsed and parsed.get("date"):
+                    collected[parsed["date"]] = parsed
+                    parsed_dates.append(parsed["date"])
+
+            if not parsed_dates:
+                empty_streak += 1
+                if empty_streak >= self._max_attempts:
+                    break
+                chunk_end = start_dt - dt.timedelta(days=1)
+                continue
+
+            empty_streak = 0
+            oldest_dt = min(dt.datetime.strptime(d, "%Y%m%d") for d in parsed_dates)
+            chunk_end = oldest_dt - dt.timedelta(days=1)
+
+        parsed = sorted(collected.values(), key=lambda x: x["date"])
+        if len(parsed) > target:
+            parsed = parsed[-target:]
+        return parsed
+
+    def _fetch_overseas_candle_chunk(
+        self,
+        *,
+        symbol: str,
+        exchange: str,
+        start_date: str,
+        end_date: str,
+        adjusted: bool,
+    ) -> list[dict[str, Any]]:
+        params = {
+            # KIS overseas params: EXCD(exchange), SYMB(symbol), GUBN(0:period), BYMD(end ymd), MODP(1:adjusted)
+            "EXCD": exchange,
+            "SYMB": symbol,
+            "GUBN": "0",
+            "BYMD": end_date,
+            "MODP": "1" if adjusted else "0",
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": self._access_token,
+            "appkey": self.creds.app_key,
+            "appsecret": self.creds.app_secret,
+            "tr_id": self.creds.overseas_tr_id,
+            "custtype": "P",
+        }
+
+        data: dict[str, Any] | None = None
+        for attempt in range(self._max_attempts):
+            try:
+                resp = self._request(
+                    "GET", self.creds.overseas_candle_url, headers=headers, params=params
+                )
+            except requests.RequestException as exc:  # pragma: no cover
+                if attempt < self._max_attempts - 1:
+                    time.sleep(1.0)
+                    continue
+                raise KISClientError(f"Overseas daily request failed: {exc}")
+
+            if resp.status_code != 200:
+                if attempt < self._max_attempts - 1:
+                    time.sleep(1.0)
+                    continue
+                raise KISClientError(f"Overseas daily HTTP {resp.status_code}: {resp.text}")
+
+            try:
+                parsed = resp.json()
+            except ValueError as exc:
+                if attempt < self._max_attempts - 1:
+                    time.sleep(1.0)
+                    continue
+                raise KISClientError("Overseas daily response is not JSON") from exc
+
+            if not isinstance(parsed, dict):
+                raise KISClientError("Overseas daily response payload is not an object")
+
+            data = parsed
+
+            if str(parsed.get("rt_cd")) != "0":
+                msg_cd = parsed.get("msg_cd") or ""
+                msg1 = parsed.get("msg1") or "Unknown error"
+                if msg_cd == "EGW00201" and attempt < self._max_attempts - 1:
+                    time.sleep(max(1.0, self._min_interval))
+                    continue
+                raise KISClientError(f"KIS overseas error: {msg1}")
+            break
+
+        if data is None:
+            return []
+
+        # overseas output variable names differ; prefer 'output2' like domestic. Fallback to 'output'
+        return data.get("output2") or data.get("output") or []
+
+    @staticmethod
+    def _parse_overseas_candle(item: dict[str, Any] | None) -> Optional[dict[str, Any]]:
+        if not item:
+            return None
+
+        def _to_float(val: Any) -> float:
+            if val is None or val == "":
+                return float("nan")
+            try:
+                return float(str(val).replace(",", ""))
+            except ValueError:
+                return float("nan")
+
+        # Overseas fields typically: xymd, open, high, low, close/last, volume/tvol
+        return {
+            "date": str(item.get("xymd") or item.get("stck_bsop_date") or "").replace("-", ""),
+            "open": _to_float(item.get("open") or item.get("stck_oprc")),
+            "high": _to_float(item.get("high") or item.get("stck_hgpr")),
+            "low": _to_float(item.get("low") or item.get("stck_lwpr")),
+            "close": _to_float(
+                item.get("close") or item.get("last") or item.get("clos") or item.get("stck_clpr")
+            ),
+            "volume": _to_float(item.get("volume") or item.get("tvol") or item.get("acml_vol")),
+            "prev_close_diff": _to_float(item.get("prdy_vrss") or 0),
+        }
 
     @staticmethod
     def _parse_candle(item: dict[str, Any] | None) -> Optional[dict[str, Any]]:
@@ -452,17 +701,13 @@ class KISClient:
 
             # Request with body-level rate limit handling
             for attempt in range(self._max_attempts):
-                resp = self._request(
-                    "GET", self.creds.volume_rank_url, headers=hdrs, params=params
-                )
+                resp = self._request("GET", self.creds.volume_rank_url, headers=hdrs, params=params)
 
                 if resp.status_code != 200:
                     if attempt < self._max_attempts - 1:
                         time.sleep(1.0)
                         continue
-                    raise KISClientError(
-                        f"Volume rank HTTP {resp.status_code}: {resp.text}"
-                    )
+                    raise KISClientError(f"Volume rank HTTP {resp.status_code}: {resp.text}")
 
                 try:
                     data = resp.json()
@@ -492,6 +737,151 @@ class KISClient:
             tr_cont = "N"
 
         return results[:limit]
+
+    # ------------------------------------------------------------------
+    # Overseas ranking helpers
+    # ------------------------------------------------------------------
+    def _fetch_overseas_rank_items(
+        self,
+        *,
+        url: str,
+        tr_id: str,
+        params: dict[str, Any],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        if limit <= 0:
+            return []
+
+        self.ensure_token()
+        request_params = {k: ("" if v is None else v) for k, v in params.items()}
+        request_params.setdefault("AUTH", "")
+        request_params.setdefault("KEYB", "")
+
+        headers_base = {
+            "Content-Type": "application/json",
+            "authorization": self._access_token,
+            "appkey": self.creds.app_key,
+            "appsecret": self.creds.app_secret,
+            "tr_id": tr_id,
+            "custtype": "P",
+        }
+
+        results: list[dict[str, Any]] = []
+        tr_cont = ""
+
+        while len(results) < limit:
+            headers = headers_base.copy()
+            if tr_cont:
+                headers["tr_cont"] = tr_cont
+
+            resp = self._request("GET", url, headers=headers, params=request_params)
+
+            if resp.status_code != 200:
+                raise KISClientError(f"Overseas rank HTTP {resp.status_code}: {resp.text}")
+
+            try:
+                data = resp.json()
+            except ValueError as exc:
+                raise KISClientError("Overseas rank response is not JSON") from exc
+
+            if str(data.get("rt_cd")) != "0":
+                msg = data.get("msg1") or data.get("msg_cd") or "Unknown error"
+                raise KISClientError(f"KIS overseas rank error: {msg}")
+
+            items = data.get("output2") or data.get("output") or []
+            if isinstance(items, dict):
+                items = [items]
+
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                results.append(item)
+                if len(results) >= limit:
+                    break
+
+            if len(results) >= limit:
+                break
+
+            tr_cont = (resp.headers.get("tr_cont") or "").strip()
+            keyb = (
+                data.get("keyb")
+                or data.get("KEYB")
+                or (data.get("output1") or {}).get("keyb")
+                or ""
+            )
+            request_params["KEYB"] = keyb
+
+            if tr_cont not in {"M", "F"}:
+                break
+
+        return results[:limit]
+
+    def overseas_trade_volume_rank(
+        self,
+        *,
+        exchange: str,
+        limit: int,
+        nday: str = "0",
+        volume_filter: str = "0",
+    ) -> list[dict[str, Any]]:
+        params = {
+            "EXCD": exchange,
+            "NDAY": nday,
+            "VOL_RANG": volume_filter,
+        }
+        return self._fetch_overseas_rank_items(
+            url=self.creds.overseas_volume_rank_url(),
+            tr_id="HHDFS76310010",
+            params=params,
+            limit=limit,
+        )
+
+    def overseas_trade_value_rank(
+        self,
+        *,
+        exchange: str,
+        limit: int,
+        nday: str = "0",
+        volume_filter: str = "0",
+        price_min: Optional[float] = None,
+        price_max: Optional[float] = None,
+    ) -> list[dict[str, Any]]:
+        def _price(val: Optional[float]) -> str:
+            if val is None or val <= 0:
+                return ""
+            return str(int(val))
+
+        params: dict[str, Any] = {
+            "EXCD": exchange,
+            "NDAY": nday,
+            "VOL_RANG": volume_filter,
+            "PRC1": _price(price_min),
+            "PRC2": _price(price_max),
+        }
+        return self._fetch_overseas_rank_items(
+            url=self.creds.overseas_trade_value_rank_url(),
+            tr_id="HHDFS76320010",
+            params=params,
+            limit=limit,
+        )
+
+    def overseas_market_cap_rank(
+        self,
+        *,
+        exchange: str,
+        limit: int,
+        volume_filter: str = "0",
+    ) -> list[dict[str, Any]]:
+        params = {
+            "EXCD": exchange,
+            "VOL_RANG": volume_filter,
+        }
+        return self._fetch_overseas_rank_items(
+            url=self.creds.overseas_market_cap_rank_url(),
+            tr_id="HHDFS76350100",
+            params=params,
+            limit=limit,
+        )
 
     @staticmethod
     def _parse_rank_item(item: dict[str, Any] | None) -> Optional[dict[str, Any]]:

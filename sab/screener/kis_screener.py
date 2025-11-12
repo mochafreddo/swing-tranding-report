@@ -27,7 +27,9 @@ class ScreenResult:
 class KISScreener:
     """Fetches ranked tickers from KIS Developers volume-rank API."""
 
-    def __init__(self, client: KISClient, cache_dir: str | None = None, cache_ttl_minutes: float = 5.0) -> None:
+    def __init__(
+        self, client: KISClient, cache_dir: str | None = None, cache_ttl_minutes: float = 5.0
+    ) -> None:
         self._client = client
         self._cache_dir = cache_dir
         self._cache_ttl = cache_ttl_minutes
@@ -60,10 +62,7 @@ class KISScreener:
 
             enriched = dict(row)
             name = (
-                row.get("hts_kor_isnm")
-                or row.get("stck_hnm")
-                or row.get("kor_sec_name")
-                or ticker
+                row.get("hts_kor_isnm") or row.get("stck_hnm") or row.get("kor_sec_name") or ticker
             )
             enriched["ticker"] = ticker
             enriched["name"] = name
@@ -95,7 +94,7 @@ class KISScreener:
         return result
 
     def _cache_key(self, request: ScreenRequest) -> str:
-        parts = ["screener", f"limit{request.limit}" ]
+        parts = ["screener", f"limit{request.limit}"]
         if request.min_price:
             parts.append(f"price{int(request.min_price)}")
         if request.min_dollar_volume:
@@ -103,6 +102,8 @@ class KISScreener:
         return "_".join(parts)
 
     def _load_cache(self, request: ScreenRequest) -> ScreenResult | None:
+        if self._cache_dir is None:
+            return None
         key = self._cache_key(request)
         data = load_json(self._cache_dir, key)
         if not data:
@@ -122,12 +123,12 @@ class KISScreener:
         metadata = dict(metadata)
         metadata["cache_status"] = "hit"
         metadata["cache_age_min"] = round(age, 2)
-        logger.info(
-            "Screener cache hit (age %.2f minutes) for %s", age, request.limit
-        )
+        logger.info("Screener cache hit (age %.2f minutes) for %s", age, request.limit)
         return ScreenResult(tickers=data.get("tickers", []), metadata=metadata)
 
     def _save_cache(self, request: ScreenRequest, result: ScreenResult) -> None:
+        if self._cache_dir is None:
+            return
         key = self._cache_key(request)
         metadata = dict(result.metadata)
         metadata["cache_status"] = "refresh"

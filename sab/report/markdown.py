@@ -75,6 +75,20 @@ def write_report(
             lines.append(
                 f"- Price: {c.get('price','-')} (d/d {c.get('pct_change','-')}) H: {c.get('high','-')} L: {c.get('low','-')}"
             )
+            currency = c.get("currency")
+            if currency and currency.upper() != "KRW":
+                fx_note = c.get("fx_note")
+                converted = c.get("price_converted")
+                extra = fx_note or ""
+                if converted:
+                    extra = (extra + ", " if extra else "") + f"가격 ≈ ₩{converted:,.0f}"
+                label = f"- Currency: {currency}"
+                if extra:
+                    label += f" ({extra})"
+                lines.append(label)
+            status = c.get("market_status")
+            if status:
+                lines.append(f"- Market: {status}")
             trend_line = f"- Trend: EMA20({c.get('ema20','-')}) vs EMA50({c.get('ema50','-')})"
             if c.get("sma200") and c.get("sma200") != "-":
                 trend_line += f", SMA200({c.get('sma200','-')})"

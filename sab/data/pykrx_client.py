@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import importlib
+from types import ModuleType
 from typing import Any, Optional
 
 
@@ -17,13 +19,7 @@ class PykrxClient:
 
     def __init__(self, *, cache_dir: Optional[str] = None) -> None:
         self.cache_dir = cache_dir
-        # Lazy import check so we fail fast when instantiated
-        try:
-            import pykrx.stock  # noqa: F401
-        except ImportError as exc:  # pragma: no cover - runtime dependency
-            raise PykrxNotInstalledError(
-                "pykrx is required for PyKRX data provider. Install with 'uv add pykrx'."
-            ) from exc
+        self._stock_module: ModuleType = _import_pykrx_stock()
 
     # ------------------------------------------------------------------
     def daily_candles(
@@ -37,12 +33,7 @@ class PykrxClient:
         if not ticker:
             raise PykrxClientError("Ticker is required")
 
-        try:
-            from pykrx import stock
-        except ImportError as exc:  # pragma: no cover - guarded in __init__
-            raise PykrxNotInstalledError(
-                "pykrx is required for PyKRX data provider. Install with 'uv add pykrx'."
-            ) from exc
+        stock = self._stock_module
 
         target = max(1, count)
         lookback_days = max(365, int(target * 3))
@@ -115,6 +106,15 @@ class PykrxClient:
             records = records[-target:]
 
         return records
+
+
+def _import_pykrx_stock() -> ModuleType:
+    try:
+        return importlib.import_module("pykrx.stock")
+    except ImportError as exc:  # pragma: no cover - runtime dependency
+        raise PykrxNotInstalledError(
+            "pykrx is required for PyKRX data provider. Install with 'uv add pykrx'."
+        ) from exc
 
 
 def _to_float(value: Any) -> float:

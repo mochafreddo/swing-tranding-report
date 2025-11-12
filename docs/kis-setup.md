@@ -25,6 +25,13 @@
 - 엔드포인트: KIS 해외주식 카테고리(예: 현재가/체결/차트 등) REST API 사용
 - 차이점: 심볼 포맷(미국 티커), 통화(USD), 거래시간(미 동부 기준), 휴장일 상이
 - 권장: `UNIVERSE_MARKETS=KR,US`, 필요시 환율 조회/표시(선택)
+- 스크리너(랭킹): KIS 해외 시세분석 카테고리 활용
+  - 거래량순위: `trade_vol`
+  - 시가총액순위: `market_cap`
+  - 거래대금순위: `trade_pbmn`
+  - 구성/쿼리 파라미터(EXCD=거래소, LIMIT 등)는 KIS 문서 기준에 맞춰 조정
+- 휴일/휴장일: KIS 해외 결제/휴일 조회 API 참고(`countries_holiday`)
+  - 메타데이터에 “US Holiday: true/false, name” 등 표기 예정
 
 ## 3) 인증/토큰 흐름 (개요)
 

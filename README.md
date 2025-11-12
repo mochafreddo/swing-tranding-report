@@ -32,10 +32,15 @@
   - `MIN_HISTORY_BARS=200` (다중 구간 호출로 목표 히스토리 길이 확보)
   - `KIS_MIN_INTERVAL_MS=500` (요청 간 최소 간격, 데모 500ms 권장)
   - `UNIVERSE_MARKETS=KR,US` (선택: 해외(US) 포함)
+  - (선택) 해외 스크리너(KIS 연동 또는 기본목록)
+    - `US_SCREENER_LIMIT=20`
+    - `config.yaml`의 `screener.us_mode` = `kis` 또는 `defaults`
+    - `screener.us_metric` = `volume|market_cap|value`
   - `ENTRY_CHECK_ENABLED=false` (선택: 장 오픈 진입 체크 기능)
   - `MIN_PRICE=1000` (스크리너 최소 가격 필터)
   - `RS_LOOKBACK_DAYS=60` (상대강도 계산 기간)
   - `RS_BENCHMARK_RETURN=0.0` (비교 기준 수익률, 소수로 입력 ex 0.05)
+  - `USD_KRW_RATE=1320` (선택: 미국 종목을 KRW로 병기할 때 사용)
   - (선택) Sell 규칙 커스터마이즈:
     - `SELL_ATR_MULTIPLIER=1.0`
     - `SELL_TIME_STOP_DAYS=10`
@@ -59,6 +64,18 @@
   - Sell/Review: `reports/YYYY-MM-DD.sell.md` (보유 종목 평가)
   - Entry: `reports/YYYY-MM-DD.entry.md` (익일 시초 체크) — 예정
   - 상세 포맷은 `docs/report-spec.md` 참고
+
+참고(US 시장)
+- 해외 스크리너 모드
+  - `kis`: KIS 해외 랭킹 API(거래량/시가총액/거래대금 순위) 사용
+  - `defaults`: 설정의 기본 유니버스(`screener.us_defaults`)에서 상위 N 선택
+- 미국 시장 시간대는 EST/EDT 기준(09:30–16:00)이며, 스크리너 메타데이터에 시장 상태(open/closed)를 표기합니다.
+- 환율/통화 병기: `USD_KRW_RATE`를 지정하면 Buy 리포트에서 USD 가격과 원화 환산 값을 함께 보여줍니다.
+- 휴장일: KIS 해외 휴일 API(`countries-holiday`)를 조회해 휴일/조기폐장 여부를 메타데이터에 표시합니다.
+
+Per‑market 임계치(권장)
+- `config.yaml`의 `screener.min_price`/`min_dollar_volume`는 KR 기준(원화)
+- `screener.us.min_price`/`min_dollar_volume`는 US 기준(달러)로 별도 지정해 정확도를 높일 수 있습니다.
 
 참고: KIS 토큰은 1일 1회 발급 원칙입니다. 본 프로젝트는 토큰을 `data/`에 캐시해 같은 날 재발급을 피합니다.
 
