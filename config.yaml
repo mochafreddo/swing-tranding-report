@@ -9,7 +9,7 @@ data:
   data_dir: data
 
 kis:
-  base_url: https://openapi.koreainvestment.com
+  base_url: https://openapi.koreainvestment.com:9443
   min_interval_ms: 500
 
 screener:
@@ -20,10 +20,10 @@ screener:
   min_price: 1000
   min_dollar_volume: 5000000000
   # US-specific screener settings and thresholds
-  us_mode: kis           # 'kis' to use KIS screener; 'defaults' to use us_defaults list
-  us_metric: volume      # 'volume' | 'market_cap' | 'value' (used when us_mode=kis)
+  us_mode: kis # 'kis' to use KIS screener; 'defaults' to use us_defaults list
+  us_metric: volume # 'volume' | 'market_cap' | 'value' (used when us_mode=kis)
   us_limit: 20
-  us_defaults:           # used when us_mode='defaults' or KIS falls back
+  us_defaults: # used when us_mode='defaults' or KIS falls back
     - AAPL.US
     - MSFT.US
     - NVDA.US
@@ -33,8 +33,6 @@ screener:
   us:
     min_price: 5
     min_dollar_volume: 5000000
-
-
 
 strategy:
   use_sma200_filter: true

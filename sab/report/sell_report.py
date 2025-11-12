@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import os
+import math
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
@@ -30,6 +31,28 @@ def _fmt_percent(value: Optional[float]) -> str:
         return "-"
 
 
+def _fmt_currency(value: Optional[float], currency: Optional[str], fx_rate: Optional[float]) -> str:
+    if value is None:
+        return "-"
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    if math.isnan(numeric):
+        return "-"
+
+    curr = (currency or "KRW").upper()
+    if curr == "USD":
+        display = f"${numeric:,.2f}"
+        if fx_rate:
+            converted = numeric * fx_rate
+            display += f" (₩{converted:,.0f})"
+        return display
+    if curr == "KRW":
+        return f"₩{numeric:,.0f}"
+    return f"{curr} {numeric:,.2f}"
+
+
 @dataclass
 class SellReportRow:
     ticker: str
@@ -56,6 +79,8 @@ def write_sell_report(
     cache_hint: str | None = None,
     atr_trail_multiplier: float | None = None,
     time_stop_days: int | None = None,
+    fx_rate: float | None = None,
+    fx_note: str | None = None,
 ) -> str:
     _ensure_dir(report_dir)
 
@@ -75,6 +100,7 @@ def write_sell_report(
 
     rows = list(evaluated)
     failures_list = list(failures or [])
+    has_usd = any((row.currency or "").upper() == "USD" for row in rows)
 
     rules: List[str] = []
     if atr_trail_multiplier is not None:
@@ -88,6 +114,16 @@ def write_sell_report(
     cache_note = f" (cache: {cache_hint})" if cache_hint else ""
     lines.append(f"- Provider: {provider}{cache_note}")
     lines.append(f"- Evaluated holdings: {len(rows)}")
+    if has_usd:
+        if fx_rate:
+            fx_line = f"- FX: 1 USD ≈ ₩{fx_rate:,.0f}"
+            if fx_note:
+                fx_line += f" ({fx_note})"
+        elif fx_note:
+            fx_line = f"- FX: {fx_note}"
+        else:
+            fx_line = "- FX: unavailable"
+        lines.append(fx_line)
     if rules:
         lines.append(f"- Rules: {', '.join(rules)}")
     if failures_list:
@@ -103,12 +139,12 @@ def write_sell_report(
                 "| {ticker} | {qty} | {entry} | {last} | {pnl} | {state} | {stop} | {target} |".format(
                     ticker=row.ticker,
                     qty=_fmt_number(row.quantity, 0),
-                    entry=_fmt_number(row.entry_price, 0),
-                    last=_fmt_number(row.last_price, 0),
+                    entry=_fmt_currency(row.entry_price, row.currency, fx_rate),
+                    last=_fmt_currency(row.last_price, row.currency, fx_rate),
                     pnl=_fmt_percent(row.pnl_pct),
                     state=row.action,
-                    stop=_fmt_number(row.stop_price, 0),
-                    target=_fmt_number(row.target_price, 0),
+                    stop=_fmt_currency(row.stop_price, row.currency, fx_rate),
+                    target=_fmt_currency(row.target_price, row.currency, fx_rate),
                 )
             )
         lines.append("")
@@ -122,17 +158,21 @@ def write_sell_report(
             if row.quantity is not None:
                 entry_details.append(f"Qty {row.quantity:g}")
             if row.entry_price is not None:
-                entry_details.append(f"Entry {row.entry_price:,.0f}")
+                entry_details.append(
+                    f"Entry {_fmt_currency(row.entry_price, row.currency, fx_rate)}"
+                )
             if row.entry_date:
                 entry_details.append(f"since {row.entry_date}")
             if entry_details:
                 lines.append(f"- Position: {' / '.join(entry_details)}")
             if row.last_price is not None:
-                lines.append(f"- Last close: {_fmt_number(row.last_price, 0)}")
+                lines.append(
+                    f"- Last close: {_fmt_currency(row.last_price, row.currency, fx_rate)}"
+                )
             lines.append(f"- P/L: {_fmt_percent(row.pnl_pct)}")
             if row.stop_price is not None or row.target_price is not None:
-                stop_txt = _fmt_number(row.stop_price, 0)
-                target_txt = _fmt_number(row.target_price, 0)
+                stop_txt = _fmt_currency(row.stop_price, row.currency, fx_rate)
+                target_txt = _fmt_currency(row.target_price, row.currency, fx_rate)
                 lines.append(f"- Risk guide: Stop {stop_txt} / Target {target_txt}")
             if row.notes:
                 lines.append(f"- Notes: {row.notes}")
@@ -158,4 +198,3 @@ def write_sell_report(
 
 
 __all__ = ["SellReportRow", "write_sell_report"]
-

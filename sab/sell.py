@@ -12,12 +12,36 @@ from .data.pykrx_client import (
     PykrxClientError,
     PykrxNotInstalledError,
 )
+from .fx import SUFFIX_TO_EXCD, resolve_fx_rate
 from .report.sell_report import SellReportRow, write_sell_report
 from .signals.sell_rules import SellEvaluation, SellSettings, evaluate_sell_signals
 
 
 def _infer_env_from_base(base_url: str) -> str:
     return "demo" if "vts" in base_url.lower() else "real"
+
+
+US_SUFFIXES = {s.upper() for s in SUFFIX_TO_EXCD.keys()}
+
+
+def _split_symbol_and_suffix(ticker: str) -> tuple[str, Optional[str]]:
+    if "." not in ticker:
+        return ticker.strip().upper(), None
+    base, suffix = ticker.rsplit(".", 1)
+    return base.strip().upper(), suffix.strip().upper()
+
+
+def _exchange_from_suffix(suffix: Optional[str]) -> Optional[str]:
+    if not suffix:
+        return None
+    return SUFFIX_TO_EXCD.get(suffix.upper())
+
+
+def _infer_currency_from_ticker(ticker: str) -> str:
+    _, suffix = _split_symbol_and_suffix(ticker)
+    if suffix and suffix.upper() in US_SUFFIXES:
+        return "USD"
+    return "KRW"
 
 
 def run_sell(*, provider: Optional[str]) -> int:
@@ -30,6 +54,15 @@ def run_sell(*, provider: Optional[str]) -> int:
 
     tickers = [h.ticker for h in holdings if h.ticker]
     unique_tickers = list(dict.fromkeys(tickers))
+
+    ticker_currency: Dict[str, str] = {}
+    for holding in holdings:
+        if not holding.ticker:
+            continue
+        currency = (holding.entry_currency or "").strip().upper()
+        if not currency:
+            currency = _infer_currency_from_ticker(holding.ticker)
+        ticker_currency[holding.ticker] = currency
 
     failures: List[str] = []
     market_data: Dict[str, List[Dict[str, Any]]] = {}
@@ -62,9 +95,7 @@ def run_sell(*, provider: Optional[str]) -> int:
 
     if cfg.data_provider == "kis":
         if not (cfg.kis_app_key and cfg.kis_app_secret and cfg.kis_base_url):
-            msg = (
-                "KIS credentials missing. Set KIS_APP_KEY, KIS_APP_SECRET, KIS_BASE_URL in .env (see docs/kis-setup.md)."
-            )
+            msg = "KIS credentials missing. Set KIS_APP_KEY, KIS_APP_SECRET, KIS_BASE_URL in .env (see docs/kis-setup.md)."
             failures.append(msg)
             logger.error(msg)
             fatal_failure = True
@@ -78,16 +109,12 @@ def run_sell(*, provider: Optional[str]) -> int:
             min_interval = None
             if cfg.kis_min_interval_ms is not None:
                 min_interval = max(0.0, cfg.kis_min_interval_ms / 1000.0)
-            kis_client = KISClient(
-                creds, cache_dir=cfg.data_dir, min_interval=min_interval
-            )
+            kis_client = KISClient(creds, cache_dir=cfg.data_dir, min_interval=min_interval)
             cache_hint = kis_client.cache_status
     elif cfg.data_provider == "pykrx":
         client = ensure_pykrx_client()
         if client is None:
-            msg = (
-                "PyKRX provider selected but pykrx package is unavailable. Install with 'uv add pykrx'."
-            )
+            msg = "PyKRX provider selected but pykrx package is unavailable. Install with 'uv add pykrx'."
             failures.append(msg)
             logger.error(msg)
             fatal_failure = True
@@ -101,14 +128,38 @@ def run_sell(*, provider: Optional[str]) -> int:
 
     target_bars = max(cfg.min_history_bars, 200)
 
+    fx_rate: Optional[float] = None
+    fx_note: Optional[str] = None
+    if unique_tickers:
+        resolved_rate, resolved_note, fx_messages = resolve_fx_rate(
+            cfg=cfg,
+            ticker_currency=ticker_currency,
+            tickers=unique_tickers,
+            kis_client=kis_client,
+            logger=logger,
+        )
+        fx_rate = resolved_rate
+        fx_note = resolved_note
+        if fx_messages:
+            failures.extend(fx_messages)
+
     if cfg.data_provider == "kis" and kis_client:
         for ticker in unique_tickers:
-            cache_key = f"candles_{ticker}"
+            base_symbol, suffix = _split_symbol_and_suffix(ticker)
+            exch = _exchange_from_suffix(suffix)
+            cache_key = (
+                f"candles_overseas_{exch}_{base_symbol}" if exch else f"candles_{base_symbol}"
+            )
             cached = load_json(cfg.data_dir, cache_key)
             if isinstance(cached, list) and cached:
                 market_data[ticker] = cached
             try:
-                candles = kis_client.daily_candles(ticker, count=target_bars)
+                if exch:
+                    candles = kis_client.overseas_daily_candles(
+                        symbol=base_symbol, exchange=exch, count=target_bars
+                    )
+                else:
+                    candles = kis_client.daily_candles(base_symbol, count=target_bars)
                 if candles:
                     market_data[ticker] = candles
                     save_json(cfg.data_dir, cache_key, candles)
@@ -125,11 +176,10 @@ def run_sell(*, provider: Optional[str]) -> int:
                 else:
                     fallback_client = ensure_pykrx_client()
                     fallback_error = pykrx_init_error
-                    if fallback_client is not None:
+                    if fallback_client is not None and not exch:
+                        # PyKRX supports KR tickers only
                         try:
-                            candles = fallback_client.daily_candles(
-                                ticker, count=target_bars
-                            )
+                            candles = fallback_client.daily_candles(base_symbol, count=target_bars)
                         except PykrxClientError as py_exc:
                             fallback_client = None
                             fallback_error = str(py_exc)
@@ -142,9 +192,7 @@ def run_sell(*, provider: Optional[str]) -> int:
                                     exc,
                                     len(candles),
                                 )
-                                failures.append(
-                                    f"{ticker}: KIS error ({exc}); used PyKRX fallback"
-                                )
+                                failures.append(f"{ticker}: KIS error ({exc}); used PyKRX fallback")
                                 if not pykrx_warning_added:
                                     failures.append(
                                         "Warning: PyKRX fallback data is end-of-day and may differ from KIS."
@@ -154,7 +202,7 @@ def run_sell(*, provider: Optional[str]) -> int:
                             fallback_error = "No data from PyKRX"
                             fallback_client = None
                     msg = f"{ticker}: {exc}"
-                    if fallback_client is None and fallback_error:
+                    if (fallback_client is None or exch) and fallback_error:
                         msg += f" (PyKRX fallback unavailable: {fallback_error})"
                     failures.append(msg)
                     logger.error(msg)
@@ -177,7 +225,9 @@ def run_sell(*, provider: Optional[str]) -> int:
                 logger.warning(msg)
 
         if unique_tickers and not pykrx_warning_added:
-            failures.append("Warning: PyKRX provider data is end-of-day and may lag intraday feeds.")
+            failures.append(
+                "Warning: PyKRX provider data is end-of-day and may lag intraday feeds."
+            )
             pykrx_warning_added = True
 
     results: List[SellReportRow] = []
@@ -230,6 +280,10 @@ def run_sell(*, provider: Optional[str]) -> int:
             except TypeError:
                 pnl_pct = None
 
+        currency = holding.entry_currency or ticker_currency.get(ticker)
+        if currency:
+            currency = currency.upper()
+
         row = SellReportRow(
             ticker=ticker,
             name=ticker,
@@ -243,7 +297,7 @@ def run_sell(*, provider: Optional[str]) -> int:
             stop_price=evaluation.stop_price,
             target_price=evaluation.target_price,
             notes=holding.notes,
-            currency=holding.entry_currency,
+            currency=currency,
         )
         results.append(row)
 
@@ -257,6 +311,8 @@ def run_sell(*, provider: Optional[str]) -> int:
         cache_hint=cache_hint,
         atr_trail_multiplier=cfg.sell_atr_multiplier,
         time_stop_days=cfg.sell_time_stop_days,
+        fx_rate=fx_rate,
+        fx_note=fx_note,
     )
 
     logger.info("Sell report written to: %s", out_path)
