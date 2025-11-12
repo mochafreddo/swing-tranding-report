@@ -4,7 +4,7 @@ version: 1
 
 data:
   provider: kis
-  screen_limit: 30
+  screen_limit: 60
   report_dir: reports
   data_dir: data
 
@@ -14,15 +14,15 @@ kis:
 
 screener:
   enabled: true
-  limit: 20
+  limit: 60
   only: false
   cache_ttl_minutes: 5
   min_price: 1000
-  min_dollar_volume: 5000000000
+  min_dollar_volume: 3000000000
   # US-specific screener settings and thresholds
   us_mode: kis # 'kis' to use KIS screener; 'defaults' to use us_defaults list
-  us_metric: volume # 'volume' | 'market_cap' | 'value' (used when us_mode=kis)
-  us_limit: 20
+  us_metric: value # 'volume' | 'market_cap' | 'value' (used when us_mode=kis)
+  us_limit: 60
   us_defaults: # used when us_mode='defaults' or KIS falls back
     - AAPL.US
     - MSFT.US
@@ -32,20 +32,20 @@ screener:
     - GOOGL.US
   us:
     min_price: 5
-    min_dollar_volume: 5000000
+    min_dollar_volume: 3000000
 
 strategy:
   use_sma200_filter: true
-  require_slope_up: true
-  gap_atr_multiplier: 1.0
+  require_slope_up: false
+  gap_atr_multiplier: 1.5
   min_history_bars: 200
   exclude_etf_etn: true
   rs_lookback_days: 60
   rs_benchmark_return: 0.0
 
 sell:
-  atr_trail_multiplier: 1.0
-  time_stop_days: 10
+  atr_trail_multiplier: 1.5
+  time_stop_days: 30
   require_sma200: true
   ema_short: 20
   ema_long: 50
@@ -69,4 +69,3 @@ fx:
   mode: kis
   cache_ttl_minutes: 10
   kis_symbol: AAPL.NAS
-  usdkrw: 1320.0
