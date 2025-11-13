@@ -217,24 +217,60 @@ def run_scan(
             # US screener (simple defaults)
             if "US" in cfg.universe_markets:
                 us_tickers: list[str] = []
+                us_source: Optional[str] = None
                 if cfg.us_screener_mode == "kis":
                     try:
                         kscr = KUS(kis_client)
-                        kres = kscr.screen(KUSReq(limit=cfg.us_screener_limit or screener_limit, metric=cfg.us_screener_metric))
+                        kres = kscr.screen(
+                            KUSReq(
+                                limit=cfg.us_screener_limit or screener_limit,
+                                metric=cfg.us_screener_metric,
+                            )
+                        )
                         us_tickers = kres.tickers
+                        if us_tickers:
+                            us_source = "kis_overseas_rank"
+                        else:
+                            logger.warning(
+                                "US KIS screener returned 0 tickers; falling back to defaults if configured"
+                            )
                     except Exception as exc:
                         logger.warning("US KIS screener failed (%s); falling back to defaults", exc)
                 if not us_tickers and cfg.us_screener_defaults:
                     us_scr = USScreener(cfg.us_screener_defaults)
                     us_res = us_scr.screen(USScreenRequest(limit=screener_limit))
                     us_tickers = us_res.tickers
+                    if us_tickers:
+                        fallback_label = (
+                            "us_defaults (fallback)"
+                            if cfg.us_screener_mode == "kis"
+                            else "us_defaults"
+                        )
+                        us_source = fallback_label
+                        if cfg.us_screener_mode == "kis":
+                            logger.info(
+                                "US defaults list used as fallback (%s tickers)", len(us_tickers)
+                            )
+                    else:
+                        logger.warning(
+                            "US defaults list configured but returned zero tickers; US universe skipped"
+                        )
+                elif not us_tickers:
+                    logger.warning(
+                        "US screener produced no tickers and no defaults configured; US universe skipped"
+                    )
                 if not screener_only:
                     tickers = list(dict.fromkeys(tickers + us_tickers))
                 else:
                     # if screener_only but both KR and US enabled, prefer combined
                     tickers = list(dict.fromkeys(us_tickers + (tickers or [])))
                 total_added += len(us_tickers)
-                logger.info("US screener selected %s tickers (mode=%s)", len(us_tickers), cfg.us_screener_mode)
+                logger.info(
+                    "US screener selected %s tickers (mode=%s, source=%s)",
+                    len(us_tickers),
+                    cfg.us_screener_mode,
+                    us_source or "none",
+                )
 
             if total_added == 0:
                 logger.warning("Screener enabled but no markets selected or no defaults configured for US")

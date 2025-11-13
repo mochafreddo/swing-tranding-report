@@ -135,12 +135,13 @@ class KISClient:
             self.cache_status = "miss"
             return
 
-        if expiry_dt <= dt.datetime.utcnow():
+        refresh_dt = expiry_dt - dt.timedelta(minutes=5)
+        if refresh_dt <= dt.datetime.utcnow():
             self.cache_status = "expired"
             return
 
         self._access_token = f"{token_type} {token}".strip()
-        self._token_expiry = expiry_dt
+        self._token_expiry = refresh_dt
         self.cache_status = "hit"
 
     # ------------------------------------------------------------------

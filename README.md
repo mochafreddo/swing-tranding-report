@@ -69,6 +69,7 @@
   - 상세 포맷은 `docs/report-spec.md` 참고
 
 참고(US 시장)
+
 - 해외 스크리너 모드
   - `kis`: KIS 해외 랭킹 API(거래량/시가총액/거래대금 순위) 사용
   - `defaults`: 설정의 기본 유니버스(`screener.us_defaults`)에서 상위 N 선택
@@ -82,6 +83,7 @@
 - 휴장일: KIS 해외 휴일 API(`countries-holiday`)를 조회해 휴일/조기폐장 여부를 메타데이터에 표시합니다.
 
 Per‑market 임계치(권장)
+
 - `config.yaml`의 `screener.min_price`/`min_dollar_volume`는 KR 기준(원화)
 - `screener.us.min_price`/`min_dollar_volume`는 US 기준(달러)로 별도 지정해 정확도를 높일 수 있습니다.
 
