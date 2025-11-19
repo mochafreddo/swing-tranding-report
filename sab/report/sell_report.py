@@ -68,6 +68,7 @@ class SellReportRow:
     target_price: float | None
     notes: str | None = None
     currency: str | None = None
+    eval_date: str | None = None
 
 
 def write_sell_report(
@@ -167,9 +168,10 @@ def write_sell_report(
             if entry_details:
                 lines.append(f"- Position: {' / '.join(entry_details)}")
             if row.last_price is not None:
-                lines.append(
-                    f"- Last close: {_fmt_currency(row.last_price, row.currency, fx_rate)}"
-                )
+                last_line = f"- Last close: {_fmt_currency(row.last_price, row.currency, fx_rate)}"
+                if row.eval_date:
+                    last_line += f" (as of {row.eval_date})"
+                lines.append(last_line)
             lines.append(f"- P/L: {_fmt_percent(row.pnl_pct)}")
             if row.stop_price is not None or row.target_price is not None:
                 stop_txt = _fmt_currency(row.stop_price, row.currency, fx_rate)

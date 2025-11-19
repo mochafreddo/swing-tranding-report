@@ -4,6 +4,7 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from .eval_index import choose_eval_index
 from .indicators import atr, ema, rsi, sma
 
 
@@ -49,9 +50,15 @@ def evaluate_ticker(
             f"Not enough history (<{settings.min_history_bars} bars)",
         )
 
-    closes = [c["close"] for c in candles]
-    highs = [c["high"] for c in candles]
-    lows = [c["low"] for c in candles]
+    idx_eval, _ = choose_eval_index(candles, meta=meta)
+    if idx_eval < 1:
+        return EvaluationResult(ticker, None, "Not enough completed candles")
+
+    candles_eval = candles[: idx_eval + 1]
+
+    closes = [c["close"] for c in candles_eval]
+    highs = [c["high"] for c in candles_eval]
+    lows = [c["low"] for c in candles_eval]
 
     if not (_clean(closes) and _clean(highs) and _clean(lows)):
         return EvaluationResult(ticker, None, "Insufficient price data")
@@ -62,8 +69,8 @@ def evaluate_ticker(
     atr14 = atr(highs, lows, closes, 14)
     sma200 = sma(closes, 200)
 
-    latest = candles[-1]
-    previous = candles[-2]
+    latest = candles[idx_eval]
+    previous = candles[idx_eval - 1]
 
     # Market-aware price floor
     eff_min_price = settings.min_price
@@ -130,7 +137,7 @@ def evaluate_ticker(
 
     # Liquidity: average dollar volume last 20 bars
     avg_dollar_volume = 0.0
-    window = candles[-20:] if len(candles) >= 20 else candles
+    window = candles_eval[-20:] if len(candles_eval) >= 20 else candles_eval
     if window:
         total = 0.0
         count = 0

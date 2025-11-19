@@ -4,6 +4,7 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Any
 
+from .eval_index import choose_eval_index
 from .indicators import ema, rsi, sma
 
 
@@ -38,6 +39,9 @@ class HybridSellEvaluation:
     reasons: list[str]
     stop_price: float | None = None
     target_price: float | None = None
+    eval_price: float | None = None
+    eval_index: int | None = None
+    eval_date: str | None = None
 
 
 def _compute_pnl_pct(entry_price: float | None, last_close: float | None) -> float | None:
@@ -62,9 +66,19 @@ def evaluate_sell_signals_hybrid(
             action="REVIEW", reasons=["Insufficient data for hybrid sell evaluation"]
         )
 
-    closes = [float(c["close"]) for c in candles]
-    latest = candles[-1]
-    last_close = float(latest["close"])
+    meta_currency = holding.get("entry_currency") or holding.get("currency")
+    meta = {"currency": meta_currency} if meta_currency else {}
+    idx_eval, _ = choose_eval_index(candles, meta=meta)
+    if idx_eval < 1:
+        return HybridSellEvaluation(
+            action="REVIEW", reasons=["Not enough completed candles for hybrid sell"]
+        )
+
+    candles_eval = candles[: idx_eval + 1]
+    closes = [float(c["close"]) for c in candles_eval]
+    latest = candles[idx_eval]
+    last_close = float(latest.get("close") or 0.0)
+    eval_date = str(latest.get("date") or "") or None
 
     ema_short = ema(closes, settings.ema_short_period)
     ema_mid = ema(closes, settings.ema_mid_period)
@@ -124,8 +138,8 @@ def evaluate_sell_signals_hybrid(
             action = "SELL"
 
     # Consecutive bearish candles
-    if len(candles) >= 3:
-        last_three = candles[-3:]
+    if len(candles_eval) >= 3:
+        last_three = candles_eval[-3:]
         if all(float(c["close"]) < float(c["open"]) for c in last_three):
             reasons.append("Three consecutive bearish candles")
             if action != "SELL":
@@ -188,6 +202,9 @@ def evaluate_sell_signals_hybrid(
         reasons=reasons,
         stop_price=stop_price,
         target_price=target_price,
+        eval_price=last_close,
+        eval_index=idx_eval,
+        eval_date=eval_date,
     )
 
 

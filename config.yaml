@@ -14,7 +14,7 @@ kis:
 
 screener:
   enabled: true
-  limit: 40
+  limit: 50
   only: false
   cache_ttl_minutes: 5
   min_price: 10000

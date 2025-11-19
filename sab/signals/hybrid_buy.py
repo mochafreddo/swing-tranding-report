@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from .eval_index import choose_eval_index
 from .indicators import ema, rsi, sma
 
 
@@ -66,11 +67,13 @@ def _basic_filters(
     candles: list[dict[str, Any]],
     settings: HybridEvaluationSettings,
     meta: dict[str, Any],
+    eval_index: int,
 ) -> tuple[bool, str | None, float, float]:
     if len(candles) < settings.min_history_bars:
         return False, f"Not enough history (<{settings.min_history_bars} bars)", 0.0, 0.0
 
-    latest = candles[-1]
+    idx = max(0, min(eval_index, len(candles) - 1))
+    latest = candles[idx]
     currency = str(meta.get("currency", "KRW")).upper()
 
     close = float(latest.get("close") or 0.0)
@@ -80,7 +83,7 @@ def _basic_filters(
     if eff_min_price and close < eff_min_price:
         return False, f"Price {close:.2f} < MIN_PRICE {eff_min_price:.2f}", 0.0, 0.0
 
-    avg_dv = _avg_dollar_volume(candles, 20)
+    avg_dv = _avg_dollar_volume(candles[: idx + 1], 20)
     eff_min_dv = settings.min_dollar_volume
     if currency == "USD" and settings.us_min_dollar_volume is not None:
         eff_min_dv = settings.us_min_dollar_volume
@@ -288,11 +291,17 @@ def evaluate_ticker_hybrid(
     meta = meta or {}
     currency = str(meta.get("currency", "KRW")).upper()
 
-    ok, reason, last_close, avg_dv = _basic_filters(ticker, candles, settings, meta)
+    idx_eval, _ = choose_eval_index(candles, meta=meta)
+    if idx_eval < 0:
+        return HybridEvaluationResult(ticker, None, "No candle data")
+
+    candles_eval = candles[: idx_eval + 1]
+
+    ok, reason, last_close, avg_dv = _basic_filters(ticker, candles, settings, meta, idx_eval)
     if not ok:
         return HybridEvaluationResult(ticker, None, reason)
 
-    closes = [float(c.get("close") or 0.0) for c in candles]
+    closes = [float(c.get("close") or 0.0) for c in candles_eval]
     sma_trend = sma(closes, settings.sma_trend_period)
     ema_short = ema(closes, settings.ema_short_period)
     ema_mid = ema(closes, settings.ema_mid_period)
@@ -303,7 +312,7 @@ def evaluate_ticker_hybrid(
 
     # 1) Trend continuation + pullback bounce (highest priority)
     ok_pb, reasons_pb, pat_pb = _detect_trend_pullback_bounce(
-        closes, sma_trend, ema_short, ema_mid, rsi_vals, candles, settings
+        closes, sma_trend, ema_short, ema_mid, rsi_vals, candles_eval, settings
     )
     if ok_pb and pat_pb:
         pattern = pat_pb
@@ -316,7 +325,7 @@ def evaluate_ticker_hybrid(
             ema_short,
             ema_mid,
             rsi_vals,
-            candles,
+            candles_eval,
             settings,
             currency,
         )
@@ -326,7 +335,7 @@ def evaluate_ticker_hybrid(
         else:
             # 3) RSI oversold reversal
             ok_rsi, reasons_rsi, pat_rsi = _detect_rsi_oversold_reversal(
-                closes, sma_trend, ema_short, ema_mid, rsi_vals, candles, settings
+                closes, sma_trend, ema_short, ema_mid, rsi_vals, candles_eval, settings
             )
             if ok_rsi and pat_rsi:
                 pattern = pat_rsi
@@ -335,8 +344,8 @@ def evaluate_ticker_hybrid(
     if not pattern:
         return HybridEvaluationResult(ticker, None, "Did not meet hybrid signal criteria")
 
-    latest = candles[-1]
-    prev = candles[-2] if len(candles) >= 2 else latest
+    latest = candles[idx_eval]
+    prev = candles[idx_eval - 1] if idx_eval >= 1 else latest
 
     prev_close = float(prev.get("close") or 0.0)
     pct_change = (last_close - prev_close) / prev_close if prev_close else 0.0

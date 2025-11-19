@@ -4,6 +4,7 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Any
 
+from .eval_index import choose_eval_index
 from .indicators import atr, ema, rsi, sma
 
 
@@ -25,6 +26,9 @@ class SellEvaluation:
     reasons: list[str]
     stop_price: float | None = None
     target_price: float | None = None
+    eval_price: float | None = None
+    eval_index: int | None = None
+    eval_date: str | None = None
 
 
 def evaluate_sell_signals(
@@ -36,9 +40,16 @@ def evaluate_sell_signals(
     if len(candles) < settings.min_bars:
         return SellEvaluation(action="REVIEW", reasons=["Insufficient data for sell evaluation"])
 
-    closes = [c["close"] for c in candles]
-    highs = [c["high"] for c in candles]
-    lows = [c["low"] for c in candles]
+    meta_currency = holding.get("entry_currency") or holding.get("currency")
+    meta = {"currency": meta_currency} if meta_currency else {}
+    idx_eval, _ = choose_eval_index(candles, meta=meta)
+    if idx_eval < 1:
+        return SellEvaluation(action="REVIEW", reasons=["Not enough completed candles"])
+
+    candles_eval = candles[: idx_eval + 1]
+    closes = [c["close"] for c in candles_eval]
+    highs = [c["high"] for c in candles_eval]
+    lows = [c["low"] for c in candles_eval]
 
     atr_values = atr(highs, lows, closes, 14)
     stop_override = holding.get("stop_override")
@@ -49,8 +60,9 @@ def evaluate_sell_signals(
     ema_long = ema(closes, ema_len_long)
     rsi_values = rsi(closes, settings.rsi_period)
 
-    latest = candles[-1]
-    close_today = latest["close"]
+    latest = candles[idx_eval]
+    close_today = float(latest.get("close") or 0.0)
+    eval_date = str(latest.get("date") or "") or None
     atr_today = atr_values[-1]
 
     reasons: list[str] = []
@@ -112,5 +124,11 @@ def evaluate_sell_signals(
         reasons.append("No sell criteria triggered")
 
     return SellEvaluation(
-        action=action, reasons=reasons, stop_price=stop_price, target_price=target_price
+        action=action,
+        reasons=reasons,
+        stop_price=stop_price,
+        target_price=target_price,
+        eval_price=close_today,
+        eval_index=idx_eval,
+        eval_date=eval_date,
     )

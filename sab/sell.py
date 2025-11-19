@@ -26,7 +26,13 @@ def _infer_env_from_base(base_url: str) -> str:
     return "demo" if "vts" in base_url.lower() else "real"
 
 
-US_SUFFIXES = {s.upper() for s in SUFFIX_TO_EXCD.keys()}
+def _normalize_suffix(suffix: str | None) -> str:
+    if not suffix:
+        return ""
+    return "".join(ch for ch in suffix.upper() if ch.isalnum())
+
+
+US_SUFFIXES = {_normalize_suffix(s) for s in SUFFIX_TO_EXCD.keys()}
 
 
 def _split_symbol_and_suffix(ticker: str) -> tuple[str, str | None]:
@@ -39,12 +45,17 @@ def _split_symbol_and_suffix(ticker: str) -> tuple[str, str | None]:
 def _exchange_from_suffix(suffix: str | None) -> str | None:
     if not suffix:
         return None
-    return SUFFIX_TO_EXCD.get(suffix.upper())
+    norm = _normalize_suffix(suffix)
+    for key, value in SUFFIX_TO_EXCD.items():
+        if _normalize_suffix(key) == norm:
+            return value
+    return SUFFIX_TO_EXCD.get(norm)
 
 
 def _infer_currency_from_ticker(ticker: str) -> str:
     _, suffix = _split_symbol_and_suffix(ticker)
-    if suffix and suffix.upper() in US_SUFFIXES:
+    norm = _normalize_suffix(suffix)
+    if norm in US_SUFFIXES:
         return "USD"
     return "KRW"
 
@@ -278,6 +289,8 @@ def run_sell(*, provider: str | None) -> int:
             "stop_override": holding.stop_override,
             "target_override": holding.target_override,
             "strategy": holding.strategy,
+            "entry_currency": holding.entry_currency or ticker_currency.get(ticker),
+            "currency": ticker_currency.get(ticker),
         }
         if cfg.sell_mode == "sma_ema_hybrid":
             evaluation: HybridSellEvaluation | SellEvaluation = evaluate_sell_signals_hybrid(
@@ -293,12 +306,17 @@ def run_sell(*, provider: str | None) -> int:
                 holding_dict,
                 settings,
             )
-        last_close = candles[-1]["close"] if candles else None
         entry_price = holding.entry_price or None
         if entry_price is not None and (isinstance(entry_price, float) and math.isnan(entry_price)):
             entry_price = None
 
-        last_price = last_close
+        eval_price = getattr(evaluation, "eval_price", None)
+        if eval_price is None and candles:
+            eval_price = candles[-1].get("close")
+        try:
+            last_price = float(eval_price) if eval_price is not None else None
+        except (TypeError, ValueError):
+            last_price = None
         if last_price is not None and isinstance(last_price, float) and math.isnan(last_price):
             last_price = None
 
@@ -312,6 +330,12 @@ def run_sell(*, provider: str | None) -> int:
         currency = holding.entry_currency or ticker_currency.get(ticker)
         if currency:
             currency = currency.upper()
+
+        eval_date = getattr(evaluation, "eval_date", None)
+        if eval_date is None and candles:
+            raw_date = candles[-1].get("date")
+            if raw_date:
+                eval_date = str(raw_date)
 
         row = SellReportRow(
             ticker=ticker,
@@ -327,6 +351,7 @@ def run_sell(*, provider: str | None) -> int:
             target_price=evaluation.target_price,
             notes=holding.notes,
             currency=currency,
+            eval_date=eval_date,
         )
         results.append(row)
 
