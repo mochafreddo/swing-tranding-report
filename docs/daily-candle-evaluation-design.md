@@ -127,7 +127,8 @@ def choose_eval_index(
   - Optional per‑ticker metadata:
     - `currency`: `"KRW" | "USD" | ..."`
     - `exchange`: `"KRX" | "NAS" | "NYS" | ..."`
-    - potential future fields: `country`, `market`, `source`.
+    - `data_source` / `provider`: `"kis" | "pykrx" | ..."` (used to skip intraday logic for EOD-only feeds)
+    - potential future fields: `country`, `market`.
 - `provider`:
   - `"kis"` | `"pykrx"` | other.
 - `now`:

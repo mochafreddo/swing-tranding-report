@@ -113,6 +113,7 @@ def choose_eval_index(
     candles: list[dict[str, Any]],
     *,
     meta: dict[str, Any] | None = None,
+    provider: str | None = None,
     now: dt.datetime | None = None,
     lookback_for_volume: int = 5,
     thin_ratio: float = 0.2,
@@ -125,6 +126,12 @@ def choose_eval_index(
         return 0, False
 
     meta = meta or {}
+    provider_hint = (
+        str(meta.get("data_source") or meta.get("provider") or provider or "kis").strip().lower()
+    )
+    if provider_hint == "pykrx":
+        return len(candles) - 1, False
+
     market = _infer_market(meta)
     zone = US_ZONE if market == "US" else KR_ZONE
     aware_now = _ensure_now(now)

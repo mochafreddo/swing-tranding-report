@@ -105,6 +105,7 @@ def run_scan(
 
     failures: list[str] = []
     market_data: dict[str, list[dict]] = {}
+    ticker_data_source: dict[str, str] = {}
     cache_hint: str | None = None
     fatal_failure = False
 
@@ -360,6 +361,7 @@ def run_scan(
             cached = load_json(cfg.data_dir, cache_key)
             if isinstance(cached, list) and cached:
                 market_data[ticker] = cached
+                ticker_data_source.setdefault(ticker, cfg.data_provider)
                 last_date = str(cached[-1].get("date") or "")
                 if last_date:
                     latest_dates[ticker] = last_date
@@ -374,6 +376,7 @@ def run_scan(
                     )
                 if candles:
                     market_data[ticker] = candles
+                    ticker_data_source[ticker] = "kis"
                     save_json(cfg.data_dir, cache_key, candles)
                     last_date = str(candles[-1].get("date") or "")
                     if last_date:
@@ -403,6 +406,7 @@ def run_scan(
                         else:
                             if candles:
                                 market_data[ticker] = candles
+                                ticker_data_source[ticker] = "pykrx"
                                 last_date = str(candles[-1].get("date") or "")
                                 if last_date:
                                     latest_dates[ticker] = last_date
@@ -443,6 +447,7 @@ def run_scan(
 
             if candles:
                 market_data[ticker] = candles
+                ticker_data_source[ticker] = "pykrx"
                 logger.info("Fetched %s candles via PyKRX for %s", len(candles), ticker)
                 last_date = str(candles[-1].get("date") or "")
                 if last_date:
@@ -512,6 +517,12 @@ def run_scan(
             continue
         meta = dict(screener_meta_map.get(ticker, {}))
         meta["currency"] = ticker_currency.get(ticker, "KRW")
+        base_symbol, suffix = _split_overseas(ticker)
+        if "exchange" not in meta:
+            meta["exchange"] = _excd_from_suffix(suffix)
+        data_source = ticker_data_source.get(ticker, cfg.data_provider)
+        meta["data_source"] = data_source
+        meta["provider"] = data_source
         if fx_rate is not None:
             meta["usd_krw_rate"] = fx_rate
         if cfg.strategy_mode == "sma_ema_hybrid":

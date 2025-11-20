@@ -211,7 +211,7 @@ def test_evaluate_ticker_hybrid_uses_eval_index(monkeypatch):
         },
     ]
 
-    def fake_eval_index(data, meta=None, **_):
+    def fake_eval_index(data, meta=None, provider=None, **_):
         return len(data) - 2, True
 
     def fake_pattern(*_):
@@ -260,7 +260,7 @@ def test_evaluate_ticker_uses_eval_index(monkeypatch):
         {"date": "20250110", "open": 11, "high": 13, "low": 10, "close": 12, "volume": 100},
     ]
 
-    def fake_eval_index(data, meta=None):
+    def fake_eval_index(data, meta=None, provider=None):
         return len(data) - 2, True
 
     monkeypatch.setattr(ev, "choose_eval_index", fake_eval_index)
@@ -288,7 +288,7 @@ def test_evaluate_sell_signals_use_eval_index(monkeypatch):
         {"date": "20250110", "open": 11, "high": 13, "low": 10, "close": 12, "volume": 100},
     ]
 
-    def fake_eval_index(data, meta=None):
+    def fake_eval_index(data, meta=None, provider=None):
         return len(data) - 2, True
 
     monkeypatch.setattr(sr, "choose_eval_index", fake_eval_index)
@@ -310,7 +310,7 @@ def test_evaluate_sell_signals_hybrid_use_eval_index(monkeypatch):
         {"date": "20250110", "open": 11, "high": 13, "low": 10, "close": 12, "volume": 100},
     ]
 
-    def fake_eval_index(data, meta=None):
+    def fake_eval_index(data, meta=None, provider=None):
         return len(data) - 2, True
 
     monkeypatch.setattr(hs, "choose_eval_index", fake_eval_index)

@@ -42,7 +42,10 @@ def evaluate_sell_signals(
 
     meta_currency = holding.get("entry_currency") or holding.get("currency")
     meta = {"currency": meta_currency} if meta_currency else {}
-    idx_eval, _ = choose_eval_index(candles, meta=meta)
+    meta["exchange"] = holding.get("exchange")
+    meta["data_source"] = holding.get("data_source")
+    provider = str(meta.get("data_source") or holding.get("provider") or "kis").lower()
+    idx_eval, _ = choose_eval_index(candles, meta=meta, provider=provider)
     if idx_eval < 1:
         return SellEvaluation(action="REVIEW", reasons=["Not enough completed candles"])
 

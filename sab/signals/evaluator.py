@@ -50,7 +50,8 @@ def evaluate_ticker(
             f"Not enough history (<{settings.min_history_bars} bars)",
         )
 
-    idx_eval, _ = choose_eval_index(candles, meta=meta)
+    provider = str(meta.get("data_source") or meta.get("provider") or "kis").lower()
+    idx_eval, _ = choose_eval_index(candles, meta=meta, provider=provider)
     if idx_eval < 1:
         return EvaluationResult(ticker, None, "Not enough completed candles")
 

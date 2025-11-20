@@ -5,7 +5,7 @@
 - [x] Introduce `choose_eval_index` helper
   - [x] Implement exchange session detection (KRX/US, tz‑aware) and US holiday handling
   - [x] Add volume‑based thin‑candle heuristic (configurable `VOL_FLOOR`, `THIN_RATIO`)
-  - [ ] Make helper accept `meta`, `provider`, and optional `now` for testing
+  - [x] Make helper accept `meta`, `provider`, and optional `now` for testing
 
 - [x] Wire `choose_eval_index` into buy logic
   - [x] `evaluate_ticker_hybrid` (hybrid_buy): compute `idx_eval`, slice to `*_eval`, use `idx_eval` for candidate fields

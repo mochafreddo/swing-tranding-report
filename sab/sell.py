@@ -82,6 +82,7 @@ def run_sell(*, provider: str | None) -> int:
 
     failures: list[str] = []
     market_data: dict[str, list[dict[str, Any]]] = {}
+    ticker_data_source: dict[str, str] = {}
     cache_hint: str | None = None
     fatal_failure = False
 
@@ -169,6 +170,7 @@ def run_sell(*, provider: str | None) -> int:
             cached = load_json(cfg.data_dir, cache_key)
             if isinstance(cached, list) and cached:
                 market_data[ticker] = cached
+                ticker_data_source.setdefault(ticker, cfg.data_provider)
             try:
                 if exch:
                     candles = kis_client.overseas_daily_candles(
@@ -178,6 +180,7 @@ def run_sell(*, provider: str | None) -> int:
                     candles = kis_client.daily_candles(base_symbol, count=target_bars)
                 if candles:
                     market_data[ticker] = candles
+                    ticker_data_source[ticker] = "kis"
                     save_json(cfg.data_dir, cache_key, candles)
                     logger.info("Fetched %s candles for %s", len(candles), ticker)
                 else:
@@ -202,6 +205,7 @@ def run_sell(*, provider: str | None) -> int:
                         else:
                             if candles:
                                 market_data[ticker] = candles
+                                ticker_data_source[ticker] = "pykrx"
                                 logger.warning(
                                     "%s: KIS error (%s); used PyKRX fallback (%s candles)",
                                     ticker,
@@ -234,6 +238,7 @@ def run_sell(*, provider: str | None) -> int:
 
             if candles:
                 market_data[ticker] = candles
+                ticker_data_source[ticker] = "pykrx"
                 logger.info("Fetched %s candles via PyKRX for %s", len(candles), ticker)
             else:
                 msg = f"{ticker}: PyKRX returned no data"
@@ -291,6 +296,8 @@ def run_sell(*, provider: str | None) -> int:
             "strategy": holding.strategy,
             "entry_currency": holding.entry_currency or ticker_currency.get(ticker),
             "currency": ticker_currency.get(ticker),
+            "exchange": _exchange_from_suffix(suffix),
+            "data_source": ticker_data_source.get(ticker, cfg.data_provider),
         }
         if cfg.sell_mode == "sma_ema_hybrid":
             evaluation: HybridSellEvaluation | SellEvaluation = evaluate_sell_signals_hybrid(
