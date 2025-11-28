@@ -4,17 +4,17 @@ version: 1
 
 data:
   provider: kis
-  screen_limit: 80
+  screen_limit: 310
   report_dir: reports
   data_dir: data
 
 kis:
   base_url: https://openapi.koreainvestment.com:9443
-  min_interval_ms: 100
+  min_interval_ms: 200
 
 screener:
   enabled: true
-  limit: 80
+  limit: 30
   only: false
   cache_ttl_minutes: 5
   min_price: 3000
@@ -22,7 +22,7 @@ screener:
   # US-specific screener settings and thresholds
   us_mode: kis # 'kis' to use KIS screener; 'defaults' to use us_defaults list
   us_metric: value # 'volume' | 'market_cap' | 'value' (used when us_mode=kis)
-  us_limit: 60
+  us_limit: 310
   us_defaults: # used when us_mode='defaults' or KIS falls back
     - AAPL.US
     - MSFT.US

@@ -6,6 +6,9 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from .kr_calendar import load_kr_trading_calendar
+from .us_calendar import load_us_trading_calendar
+
 
 @dataclass
 class HolidayEntry:
@@ -55,12 +58,49 @@ def merge_holidays(
     fetched: list[dict[str, Any]],
 ) -> Dict[str, HolidayEntry]:
     cached = load_cached_holidays(cache_dir, country_code)
+    country = country_code.strip().upper()
+
+    if country == "US":
+        for date, note in load_us_trading_calendar(cache_dir).items():
+            cached[date] = HolidayEntry(date=date, note=note, is_open=False)
+    if country == "KR":
+        for date, note in load_kr_trading_calendar(cache_dir).items():
+            cached[date] = HolidayEntry(date=date, note=note, is_open=False)
+
     for item in fetched:
-        date = str(item.get("base_date") or item.get("TRD_DT") or "").replace("-", "")
+        natn = str(item.get("natn_eng_abrv_cd") or item.get("tr_natn_cd") or "").upper()
+        if natn and natn not in {country, "US", "USA", "840"}:
+            # Skip non-US entries even if caller passes a broader set.
+            continue
+
+        # Prefer explicit trading date fields over settlement dates.
+        date = str(
+            item.get("trd_dt")
+            or item.get("TRD_DT")
+            or item.get("base_date")
+            or item.get("base_dt")
+            or item.get("trd_date")
+            or item.get("dmst_sttl_dt")
+            or item.get("acpl_sttl_dt")
+            or ""
+        ).replace("-", "")
         if not date:
             continue
-        desc = item.get("base_event") or item.get("evnt_nm") or item.get("note")
-        is_open = str(item.get("cntr_div_cd") or item.get("open_yn") or "N").upper() in {"Y", "OPEN"}
+
+        desc = (
+            item.get("base_event")
+            or item.get("evnt_nm")
+            or item.get("tr_mket_name")
+            or item.get("natn_eng_abrv_cd")
+            or item.get("note")
+        )
+        flag_val = (
+            item.get("open_yn")
+            or item.get("mket_opn_yn")
+            or item.get("cntr_div_cd")
+            or item.get("opng_yn")
+        )
+        is_open = str(flag_val or "N").upper() in {"Y", "OPEN", "1", "T", "TRUE"}
         cached[date] = HolidayEntry(date=date, note=desc, is_open=is_open)
     save_holidays(cache_dir, country_code, cached)
     return cached
@@ -82,4 +122,3 @@ __all__ = [
     "merge_holidays",
     "lookup_holiday",
 ]
-

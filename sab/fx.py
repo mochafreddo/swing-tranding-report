@@ -182,7 +182,9 @@ def _load_cached_rate(
         fetched_at = dt.datetime.fromisoformat(fetched_at_raw)
     except ValueError:
         return None
-    age = (dt.datetime.utcnow() - fetched_at).total_seconds() / 60.0
+    if fetched_at.tzinfo is None:
+        fetched_at = fetched_at.replace(tzinfo=dt.UTC)
+    age = (dt.datetime.now(dt.UTC) - fetched_at).total_seconds() / 60.0
     if age > ttl_minutes:
         return None
     return rate, symbol, exchange, age
@@ -195,7 +197,7 @@ def _save_cached_rate(data_dir: str | None, rate: float, symbol: str, exchange: 
         "rate": rate,
         "symbol": symbol,
         "exchange": exchange,
-        "fetched_at": dt.datetime.utcnow().isoformat(),
+        "fetched_at": dt.datetime.now(dt.UTC).isoformat(),
     }
     save_json(data_dir, FX_CACHE_KEY, payload)
 

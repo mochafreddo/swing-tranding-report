@@ -332,6 +332,8 @@ def run_scan(
             end = (now + dt.timedelta(days=30)).strftime("%Y%m%d")
         except Exception:
             start = end = dt.date.today().strftime("%Y%m%d")
+
+        logger.info("Refreshing US holidays via KIS: %s -> %s", start, end)
         try:
             items = kis_client.overseas_holidays(
                 country_code="US",
@@ -345,6 +347,10 @@ def run_scan(
                 return {}
             logger.warning("Failed to refresh US holidays: %s", msg)
             return {}
+
+        logger.info("US holiday API succeeded: %s rows for %s -> %s", len(items), start, end)
+        if items:
+            logger.debug("US holiday sample row: %s", items[0])
         return merge_holidays(cfg.data_dir, "US", items)
 
     if cfg.data_provider == "kis" and kis_client:

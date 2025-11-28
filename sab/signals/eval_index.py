@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from sab.data.us_calendar import load_us_trading_calendar
+
 KR_ZONE = ZoneInfo("Asia/Seoul")
 US_ZONE = ZoneInfo("America/New_York")
 UTC_ZONE = ZoneInfo("UTC")
@@ -38,6 +40,11 @@ def _load_us_holidays() -> dict[str, bool]:
     data_dir = os.getenv("SAB_DATA_DIR") or "data"
     path = os.path.join(data_dir, "holidays_us.json")
     holidays: dict[str, bool] = {}
+
+    # Seed with built-in US calendar.
+    for date in load_us_trading_calendar(data_dir):
+        holidays[date] = True
+
     try:
         with open(path, encoding="utf-8") as fp:
             raw = json.load(fp)
@@ -47,7 +54,7 @@ def _load_us_holidays() -> dict[str, bool]:
                         continue
                     holidays[key] = not bool(value.get("is_open", True))
     except (OSError, json.JSONDecodeError):
-        holidays = {}
+        pass
 
     _US_HOLIDAYS_CACHE = holidays
     return holidays

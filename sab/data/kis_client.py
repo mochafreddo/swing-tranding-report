@@ -4,10 +4,13 @@ import datetime as dt
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
+import logging
 
 import requests
 
 from .cache import load_json, save_json
+
+logger = logging.getLogger(__name__)
 
 
 class KISClientError(RuntimeError):
@@ -135,8 +138,11 @@ class KISClient:
             self.cache_status = "miss"
             return
 
+        if expiry_dt.tzinfo is None:
+            expiry_dt = expiry_dt.replace(tzinfo=dt.timezone.utc)
+
         refresh_dt = expiry_dt - dt.timedelta(minutes=5)
-        if refresh_dt <= dt.datetime.utcnow():
+        if refresh_dt <= dt.datetime.now(dt.timezone.utc):
             self.cache_status = "expired"
             return
 
@@ -164,7 +170,7 @@ class KISClient:
         for attempt in range(self._max_attempts):
             # simple client-side throttle
             if self._min_interval and self._last_request_at is not None:
-                delta = (dt.datetime.utcnow() - self._last_request_at).total_seconds()
+                delta = (dt.datetime.now(dt.timezone.utc) - self._last_request_at).total_seconds()
                 if delta < self._min_interval:
                     time.sleep(self._min_interval - delta)
             try:
@@ -176,7 +182,7 @@ class KISClient:
                     json=json,
                     timeout=timeout,
                 )
-                self._last_request_at = dt.datetime.utcnow()
+                self._last_request_at = dt.datetime.now(dt.timezone.utc)
             except requests.RequestException as exc:
                 last_exc = exc
             else:
@@ -197,7 +203,7 @@ class KISClient:
 
     def ensure_token(self) -> None:
         if self._access_token and self._token_expiry:
-            if dt.datetime.utcnow() < self._token_expiry:
+            if dt.datetime.now(dt.timezone.utc) < self._token_expiry:
                 return
 
         payload = {
@@ -252,12 +258,16 @@ class KISClient:
                     expiry_dt = None
 
         if expiry_dt is None:
-            expiry_dt = dt.datetime.utcnow() + dt.timedelta(seconds=expires_seconds)
+            expiry_dt = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=expires_seconds)
+        elif expiry_dt.tzinfo is None:
+            expiry_dt = expiry_dt.replace(tzinfo=dt.timezone.utc)
 
         # refresh a little earlier than actual expiry
         refresh_dt = expiry_dt - dt.timedelta(minutes=5)
-        if refresh_dt <= dt.datetime.utcnow():
-            refresh_dt = dt.datetime.utcnow() + dt.timedelta(seconds=int(expires_seconds * 0.9))
+        if refresh_dt <= dt.datetime.now(dt.timezone.utc):
+            refresh_dt = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
+                seconds=int(expires_seconds * 0.9)
+            )
 
         self._access_token = f"{token_type} {token}".strip()
         self._token_expiry = refresh_dt
@@ -596,6 +606,13 @@ class KISClient:
         items = data.get("output") or []
         if not isinstance(items, list):
             items = [items]
+        logger.debug(
+            "overseas_holidays rt_cd=%s msg_cd=%s msg1=%s items=%d",
+            data.get("rt_cd"),
+            data.get("msg_cd"),
+            data.get("msg1"),
+            len(items),
+        )
         return items
 
     # ------------------------------------------------------------------
