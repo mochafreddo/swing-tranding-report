@@ -510,6 +510,7 @@ def run_scan(
         use_sma60_filter=cfg.hybrid.use_sma60_filter,
         sma60_period=cfg.hybrid.sma60_period,
         kr_breakout_requires_confirmation=cfg.hybrid.kr_breakout_requires_confirmation,
+        gap_atr_multiplier=cfg.gap_atr_multiplier,
         min_history_bars=cfg.min_history_bars,
         min_price=cfg.min_price,
         us_min_price=cfg.us_min_price,

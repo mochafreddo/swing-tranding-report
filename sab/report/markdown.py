@@ -68,7 +68,7 @@ def write_report(
         lines.append("## Candidates")
         if strategy_mode == "sma_ema_hybrid" and report_type == "buy":
             lines.append(
-                "| Ticker | Name | Price | SMA20 | EMA10 | EMA21 | RSI14 | Vol(5d) | Pattern | Score |"
+                "| Ticker | Name | Price | SMA20 | EMA10 | EMA21 | RSI14 | Vol(5d) | Pattern | State |"
             )
             lines.append(
                 "|--------|------|------:|------:|------:|------:|------:|--------:|---------|------:|"
@@ -78,7 +78,7 @@ def write_report(
                     f"| {c.get('ticker', '-')} | {c.get('name', '-')} | {c.get('price', '-')} | "
                     f"{c.get('sma20', '-')} | {c.get('ema10', '-')} | {c.get('ema21', '-')} | "
                     f"{c.get('rsi14', '-')} | {c.get('avg_dollar_volume', '-')} | "
-                    f"{c.get('pattern', '-')} | {c.get('score', '-')} |"
+                    f"{c.get('pattern', '-')} | {c.get('entry_state', '-')} |"
                 )
         else:
             lines.append("| Ticker | Name | Price | EMA20 | EMA50 | RSI14 | ATR14 | Gap | Score |")
@@ -135,16 +135,29 @@ def write_report(
             if strategy_mode == "sma_ema_hybrid" and report_type == "buy":
                 pattern = c.get("pattern")
                 if pattern:
-                    lines.append(f"- Pattern: {pattern}")
+                    entry_state = c.get("entry_state")
+                    state_label = f" ({entry_state})" if entry_state else ""
+                    lines.append(f"- Pattern: {pattern}{state_label}")
                 reasons = c.get("pattern_reasons")
                 if reasons:
                     lines.append(f"- Pattern notes: {reasons}")
+                entry_state_reason = c.get("entry_state_reason")
+                if entry_state_reason:
+                    lines.append(f"- Entry guidance: {entry_state_reason}")
                 checklist: list[str] = []
                 if c.get("sma20") not in (None, "-"):
                     checklist.append("Close>SMA20?")
                 if c.get("ema10") not in (None, "-") and c.get("ema21") not in (None, "-"):
                     checklist.append("EMA10≥EMA21?")
                 lines.append(f"- Checklist: {', '.join(checklist)}")
+                if c.get("atr14"):
+                    lines.append(f"- ATR14: {c.get('atr14')}")
+                gap_guard_pct = c.get("gap_guard_pct")
+                if gap_guard_pct and gap_guard_pct != "-":
+                    lines.append(
+                        f"- Gap guard: avoid if open > {c.get('gap_guard_up_price', '-')} "
+                        f"({gap_guard_pct}) or < {c.get('gap_guard_down_price', '-')} ({gap_guard_pct})"
+                    )
             rg = c.get("risk_guide")
             if rg:
                 lines.append(f"- Risk guide: {rg}")

@@ -215,7 +215,7 @@ def test_evaluate_ticker_hybrid_uses_eval_index(monkeypatch):
         return len(data) - 2, True
 
     def fake_pattern(*_):
-        return True, ["stub"], HybridPattern.TREND_PULLBACK_BOUNCE
+        return True, ["stub"], HybridPattern.TREND_PULLBACK_BOUNCE, {}
 
     monkeypatch.setattr(hb, "choose_eval_index", fake_eval_index)
     monkeypatch.setattr(hb, "_detect_trend_pullback_bounce", fake_pattern)
@@ -243,11 +243,13 @@ def test_evaluate_ticker_hybrid_uses_eval_index(monkeypatch):
         min_dollar_volume=0.0,
         us_min_dollar_volume=0.0,
         exclude_etf_etn=False,
+        gap_atr_multiplier=1.0,
     )
 
     result = evaluate_ticker_hybrid("FAKE.US", candles, settings, {"currency": "USD"})
     assert result.candidate is not None
     assert result.candidate["price_value"] == candles[-2]["close"]
+    assert result.candidate.get("entry_state") in {"READY", "WATCH"}
     assert "stub" in result.candidate["pattern_reasons"]
 
 
