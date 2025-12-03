@@ -62,6 +62,8 @@ class HybridSellConfig:
     failed_breakout_drop_pct: float = 0.03
     min_bars: int = 20
     time_stop_days: int = 0
+    time_stop_grace_days: int = 0
+    time_stop_profit_floor: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -355,6 +357,12 @@ def load_config(
     )
     hybrid_sell_min_bars = env_int("HYBRID_SELL_MIN_BARS", "sell.hybrid.min_bars", 20)
     hybrid_sell_time_stop = env_int("HYBRID_SELL_TIME_STOP_DAYS", "sell.hybrid.time_stop_days", 0)
+    hybrid_sell_time_stop_grace = env_int(
+        "HYBRID_SELL_TIME_STOP_GRACE_DAYS", "sell.hybrid.time_stop_grace_days", 0
+    )
+    hybrid_sell_time_stop_profit_floor = env_float(
+        "HYBRID_SELL_TIME_STOP_PROFIT_FLOOR", "sell.hybrid.time_stop_profit_floor", 0.0
+    )
 
     hybrid_sell_cfg = HybridSellConfig(
         profit_target_low=hybrid_sell_profit_low,
@@ -369,6 +377,8 @@ def load_config(
         failed_breakout_drop_pct=hybrid_sell_failed_bo_drop,
         min_bars=hybrid_sell_min_bars,
         time_stop_days=hybrid_sell_time_stop,
+        time_stop_grace_days=hybrid_sell_time_stop_grace,
+        time_stop_profit_floor=hybrid_sell_time_stop_profit_floor,
     )
 
     holdings_path = env_str("HOLDINGS_FILE", "files.holdings", None)

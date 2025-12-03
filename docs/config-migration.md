@@ -67,6 +67,8 @@
 | `HYBRID_SELL_FAILED_BREAKOUT_DROP_PCT` | `sell.hybrid.failed_breakout_drop_pct` |
 | `HYBRID_SELL_MIN_BARS` | `sell.hybrid.min_bars` |
 | `HYBRID_SELL_TIME_STOP_DAYS` | `sell.hybrid.time_stop_days` |
+| `HYBRID_SELL_TIME_STOP_GRACE_DAYS` | `sell.hybrid.time_stop_grace_days` |
+| `HYBRID_SELL_TIME_STOP_PROFIT_FLOOR` | `sell.hybrid.time_stop_profit_floor` |
 | `STRATEGY_MODE` | `strategy.mode` |
 | `HYBRID_SMA_TREND_PERIOD` | `strategy.hybrid.sma_trend_period` |
 | `HYBRID_EMA_SHORT_PERIOD` | `strategy.hybrid.ema_short_period` |

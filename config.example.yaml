@@ -93,6 +93,8 @@ sell:
     failed_breakout_drop_pct: 0.03 # breakout failure threshold (3% below entry)
     min_bars: 20                   # minimum bars required for evaluation
     time_stop_days: 0              # optional time stop (0 disables)
+    time_stop_grace_days: 0        # extra days after time_stop_days before hard exit (0 disables)
+    time_stop_profit_floor: 0.00   # P&L floor to avoid hard exit after grace (e.g., 0.03 = 3%)
 
 entry_check:
   enabled: false

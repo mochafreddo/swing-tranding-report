@@ -278,6 +278,8 @@ def run_sell(*, provider: str | None) -> int:
         failed_breakout_drop_pct=cfg.hybrid_sell.failed_breakout_drop_pct,
         min_bars=max(cfg.hybrid_sell.min_bars, 2),
         time_stop_days=cfg.hybrid_sell.time_stop_days,
+        time_stop_grace_days=cfg.hybrid_sell.time_stop_grace_days,
+        time_stop_profit_floor=cfg.hybrid_sell.time_stop_profit_floor,
     )
 
     for holding in holdings:

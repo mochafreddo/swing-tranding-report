@@ -84,7 +84,9 @@ sell:
     stop_loss_pct_max: 0.05
     failed_breakout_drop_pct: 0.03
     min_bars: 20
-    time_stop_days: 0
+    time_stop_days: 30
+    time_stop_grace_days: 15
+    time_stop_profit_floor: 0.03
 
 entry_check:
   enabled: false

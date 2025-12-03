@@ -31,6 +31,8 @@ class HybridSellSettings:
     # General
     min_bars: int = 20
     time_stop_days: int = 0  # optional; 0 to disable
+    time_stop_grace_days: int = 0  # extra days after time_stop_days before a hard exit
+    time_stop_profit_floor: float = 0.0  # minimum P&L to avoid forced exit after grace
 
 
 @dataclass
@@ -185,7 +187,10 @@ def evaluate_sell_signals_hybrid(
 
     # --- 5) Optional time stop ---
     time_stop_days = settings.time_stop_days
+    time_stop_grace_days = settings.time_stop_grace_days
+    time_stop_profit_floor = settings.time_stop_profit_floor
     entry_date_str = holding.get("entry_date")
+    days_in_trade: int | None = None
     if entry_date_str and time_stop_days > 0:
         try:
             entry_date = dt.date.fromisoformat(str(entry_date_str))
@@ -196,6 +201,35 @@ def evaluate_sell_signals_hybrid(
                     action = "REVIEW"
         except ValueError:
             pass
+
+    # Extended time stop: only if a grace window is configured
+    if (
+        days_in_trade is not None
+        and time_stop_days > 0
+        and time_stop_grace_days > 0
+        and days_in_trade >= (time_stop_days + time_stop_grace_days)
+        and action != "SELL"
+    ):
+        pnl_ok = pnl_pct is not None and pnl_pct >= time_stop_profit_floor
+        trend_ok = last_close >= sma_t and ema_short[-1] >= ema_mid[-1]
+        weak_bits = []
+        if not pnl_ok:
+            if pnl_pct is None:
+                weak_bits.append("P&L unavailable")
+            else:
+                weak_bits.append(
+                    f"P&L {pnl_pct * 100:.1f}% < floor {time_stop_profit_floor * 100:.1f}%"
+                )
+        if not trend_ok:
+            weak_bits.append("trend below SMA/EMA")
+
+        if not pnl_ok or not trend_ok:
+            reason_detail = "; ".join(weak_bits) if weak_bits else "weak trend/return"
+            reasons.append(
+                f"Extended time stop: {days_in_trade} days ≥ "
+                f"{time_stop_days + time_stop_grace_days} days ({reason_detail})"
+            )
+            action = "SELL"
 
     if not reasons:
         reasons.append("No hybrid sell criteria triggered")
